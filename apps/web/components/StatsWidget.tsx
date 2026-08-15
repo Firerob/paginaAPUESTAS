@@ -16,8 +16,15 @@ export interface ActivityStats {
   activeMatches: number;
   rakeBps: number;
   byGame: Record<"air_hockey" | "mines", GameActivity>;
-  /** Jugadores en cola o ya emparejados, por monto de apuesta. */
-  byStake: Record<number, number>;
+  /**
+   * Jugadores en cola o ya emparejados, por JUEGO y monto de apuesta.
+   * Air Hockey y Minas nunca se suman entre si.
+   */
+  byStake: Record<"air_hockey" | "mines", Record<number, number>>;
+  /** Solo Minas: jugadores en cola o emparejados por tamaño de tablero. */
+  minesByBoard: Record<number, number>;
+  /** Solo Minas: lo mismo, pero ademas separado por apuesta dentro de cada tablero. */
+  minesByBoardStake: Record<number, Record<number, number>>;
 }
 
 /** Cuenta ascendente/descendente suave hacia `value` cada vez que cambia. */

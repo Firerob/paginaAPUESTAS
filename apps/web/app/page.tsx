@@ -271,15 +271,19 @@ export default function Lobby() {
               <div className="card">
                 <h2>Tamaño del tablero</h2>
                 <div className="btn-row">
-                  {MINES_SIZES.map((option) => (
-                    <button
-                      key={option}
-                      className={size === option ? "btn" : "btn btn-ghost"}
-                      onClick={() => setSize(option)}
-                    >
-                      {option}×{option} · {minesFor(option)} minas
-                    </button>
-                  ))}
+                  {MINES_SIZES.map((option) => {
+                    const playing = activity?.minesByBoard[option] ?? 0;
+                    return (
+                      <button
+                        key={option}
+                        className={size === option ? "btn" : "btn btn-ghost"}
+                        onClick={() => setSize(option)}
+                      >
+                        {option}×{option} · {minesFor(option)} minas
+                        {activity ? ` · ${playing} jugando` : ""}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -291,7 +295,9 @@ export default function Lobby() {
               onSelect={setStake}
               rakeBps={activity?.rakeBps ?? 500}
               disabledBelow={balance?.available}
-              onlineByStake={activity?.byStake}
+              onlineByStake={
+                game === "mines" ? activity?.minesByBoardStake[size] : activity?.byStake[game]
+              }
             />
 
             <div className="cta-wrap">

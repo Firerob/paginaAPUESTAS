@@ -1,9 +1,10 @@
 import { Router, type Request, type Response } from "express";
+import { MINES_SIZES, type GameType } from "@ah/shared";
 import { pool } from "../db/pool";
 import { env } from "../config/env";
 import { STAKE_TIERS } from "../rooms/MatchManager";
 import { connectedCount } from "../services/presence";
-import { queuedByStake } from "../services/queue-stats";
+import { getQueueSnapshot } from "../services/queue-stats";
 
 /**
  * Actividad del lobby: metricas de ambiente y ganadores recientes.
@@ -16,39 +17,55 @@ import { queuedByStake } from "../services/queue-stats";
 export const activityRoutes = Router();
 
 activityRoutes.get("/api/activity/stats", async (_req: Request, res: Response) => {
-  const [{ rows: potRows }, { rows: activeRows }, { rows: byGameRows }, { rows: byStakeRows }] =
-    await Promise.all([
-      pool.query<{ pot: number }>(
-        `SELECT COALESCE(SUM(payout), 0)::bigint AS pot
-           FROM matches
-          WHERE status = 'finished' AND settled_at >= date_trunc('day', now())`,
-      ),
-      pool.query<{ n: number }>(
-        `SELECT COUNT(*)::int AS n FROM matches WHERE status IN ('escrowed', 'in_progress')`,
-      ),
-      // Desglose por juego: cuantas partidas activas hay ahora y cuantas se
-      // liquidaron hoy. Sirve para los badges honestos de las tarjetas de
-      // juego ("~N en partida", "en tendencia") en vez de inventar numeros.
-      pool.query<{ game_type: "air_hockey" | "mines"; active: number; wins_today: number }>(
-        `SELECT game_type,
-                COUNT(*) FILTER (WHERE status IN ('escrowed', 'in_progress'))::int AS active,
-                COUNT(*) FILTER (
-                  WHERE status = 'finished' AND settled_at >= date_trunc('day', now())
-                )::int AS wins_today
-           FROM matches
-          GROUP BY game_type`,
-      ),
-      // Jugadores YA emparejados (partida en curso) por monto de apuesta.
-      // Se le suma la cola en vivo (queuedByStake, en memoria del propio
-      // proceso) para el numero que ve el lobby debajo de cada ficha.
-      pool.query<{ stake: number; players_in_match: number }>(
-        `SELECT stake, (COUNT(*) FILTER (WHERE status IN ('escrowed', 'in_progress')) * 2)::int AS players_in_match
-           FROM matches
-          WHERE stake = ANY($1::bigint[])
-          GROUP BY stake`,
-        [STAKE_TIERS],
-      ),
-    ]);
+  const [
+    { rows: potRows },
+    { rows: activeRows },
+    { rows: byGameRows },
+    { rows: byGameStakeRows },
+    { rows: minesBoardRows },
+  ] = await Promise.all([
+    pool.query<{ pot: number }>(
+      `SELECT COALESCE(SUM(payout), 0)::bigint AS pot
+         FROM matches
+        WHERE status = 'finished' AND settled_at >= date_trunc('day', now())`,
+    ),
+    pool.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM matches WHERE status IN ('escrowed', 'in_progress')`,
+    ),
+    // Desglose por juego: cuantas partidas activas hay ahora y cuantas se
+    // liquidaron hoy. Sirve para los badges honestos de las tarjetas de
+    // juego ("~N en partida", "en tendencia") en vez de inventar numeros.
+    pool.query<{ game_type: GameType; active: number; wins_today: number }>(
+      `SELECT game_type,
+              COUNT(*) FILTER (WHERE status IN ('escrowed', 'in_progress'))::int AS active,
+              COUNT(*) FILTER (
+                WHERE status = 'finished' AND settled_at >= date_trunc('day', now())
+              )::int AS wins_today
+         FROM matches
+        GROUP BY game_type`,
+    ),
+    // Jugadores YA emparejados (partida en curso), por JUEGO y apuesta. Air
+    // Hockey y Minas nunca se suman entre si: son colas y salas separadas.
+    pool.query<{ game_type: GameType; stake: number; players_in_match: number }>(
+      `SELECT game_type, stake,
+              (COUNT(*) FILTER (WHERE status IN ('escrowed', 'in_progress')) * 2)::int AS players_in_match
+         FROM matches
+        WHERE stake = ANY($1::bigint[])
+        GROUP BY game_type, stake`,
+      [STAKE_TIERS],
+    ),
+    // Lo mismo pero solo Minas, desglosado ademas por tamaño de tablero
+    // (`config->>'size'`, escrito por MinesRoom.gameConfig() al crear la
+    // partida — ya esta ahi para cuando el estado pasa a 'escrowed').
+    pool.query<{ size: number; stake: number; players_in_match: number }>(
+      `SELECT (config->>'size')::int AS size, stake,
+              (COUNT(*) FILTER (WHERE status IN ('escrowed', 'in_progress')) * 2)::int AS players_in_match
+         FROM matches
+        WHERE game_type = 'mines' AND stake = ANY($1::bigint[])
+        GROUP BY config->>'size', stake`,
+      [STAKE_TIERS],
+    ),
+  ]);
 
   const byGame: Record<string, { active: number; winsToday: number }> = {
     air_hockey: { active: 0, winsToday: 0 },
@@ -58,11 +75,36 @@ activityRoutes.get("/api/activity/stats", async (_req: Request, res: Response) =
     byGame[row.game_type] = { active: row.active, winsToday: row.wins_today };
   }
 
-  const queued = queuedByStake();
-  const byStake: Record<number, number> = {};
-  for (const tier of STAKE_TIERS) byStake[tier] = queued[tier] ?? 0;
-  for (const row of byStakeRows) {
-    byStake[row.stake] = (byStake[row.stake] ?? 0) + row.players_in_match;
+  const queue = getQueueSnapshot();
+
+  const byStake: Record<GameType, Record<number, number>> = {
+    air_hockey: {},
+    mines: {},
+  };
+  for (const game of ["air_hockey", "mines"] as GameType[]) {
+    for (const tier of STAKE_TIERS) byStake[game][tier] = queue.byGameStake[game][tier] ?? 0;
+  }
+  for (const row of byGameStakeRows) {
+    byStake[row.game_type][row.stake] = (byStake[row.game_type][row.stake] ?? 0) + row.players_in_match;
+  }
+
+  // Se pre-siembra cada tablero x apuesta en 0, igual que `byStake` con los
+  // STAKE_TIERS: sin esto, un tablero sin nadie jugando faltaba del todo en
+  // la respuesta y el frontend no podia distinguir "cero" de "sin cargar".
+  const minesByBoard: Record<number, number> = {};
+  const minesByBoardStake: Record<number, Record<number, number>> = {};
+  for (const boardSize of MINES_SIZES) {
+    minesByBoard[boardSize] = queue.minesBySize[boardSize] ?? 0;
+    minesByBoardStake[boardSize] = {};
+    for (const tier of STAKE_TIERS) {
+      minesByBoardStake[boardSize][tier] = queue.minesBySizeStake[boardSize]?.[tier] ?? 0;
+    }
+  }
+  for (const row of minesBoardRows) {
+    if (row.size === null) continue; // partidas viejas sin config.size (no deberia pasar, pero no revienta)
+    minesByBoard[row.size] = (minesByBoard[row.size] ?? 0) + row.players_in_match;
+    const perSize = (minesByBoardStake[row.size] ??= {});
+    perSize[row.stake] = (perSize[row.stake] ?? 0) + row.players_in_match;
   }
 
   res.json({
@@ -72,6 +114,8 @@ activityRoutes.get("/api/activity/stats", async (_req: Request, res: Response) =
     rakeBps: env.rakeBps,
     byGame,
     byStake,
+    minesByBoard,
+    minesByBoardStake,
   });
 });
 

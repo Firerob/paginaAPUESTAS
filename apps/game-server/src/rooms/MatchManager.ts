@@ -145,15 +145,31 @@ export class MatchManager {
     this.syncQueueStats();
   }
 
-  /** Recalcula y publica cuanta gente hay en cola, sumada por monto de apuesta. */
+  /**
+   * Recalcula y publica cuanta gente hay en cola: por juego+apuesta, y para
+   * Minas ademas por tablero (y por tablero+apuesta, para cuando el jugador
+   * ya eligio un tamaño concreto). Air Hockey y Minas nunca se suman entre
+   * si — son colas separadas y el lobby las tiene que mostrar separadas.
+   */
   private syncQueueStats(): void {
-    const byStake: Record<number, number> = {};
+    const byGameStake: Record<GameType, Record<number, number>> = { air_hockey: {}, mines: {} };
+    const minesBySize: Record<number, number> = {};
+    const minesBySizeStake: Record<number, Record<number, number>> = {};
+
     for (const queue of this.queues.values()) {
       for (const entry of queue) {
-        byStake[entry.stake] = (byStake[entry.stake] ?? 0) + 1;
+        const perGame = byGameStake[entry.gameType];
+        perGame[entry.stake] = (perGame[entry.stake] ?? 0) + 1;
+
+        if (entry.gameType === "mines") {
+          minesBySize[entry.size] = (minesBySize[entry.size] ?? 0) + 1;
+          const perSize = (minesBySizeStake[entry.size] ??= {});
+          perSize[entry.stake] = (perSize[entry.stake] ?? 0) + 1;
+        }
       }
     }
-    setQueueSnapshot(byStake);
+
+    setQueueSnapshot({ byGameStake, minesBySize, minesBySizeStake });
   }
 
   private async createRoom(a: QueueEntry, b: QueueEntry): Promise<void> {
