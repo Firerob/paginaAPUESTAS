@@ -1,0 +1,355 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+import { Bomb, Clock3, Gamepad2, Swords } from "lucide-react";
+import {
+  GOALS_TO_WIN,
+  MINES_LIVES,
+  MINES_SIZES,
+  MINES_TURN_SECONDS,
+  formatCOP,
+  minesFor,
+  type MinesSize,
+} from "@ah/shared";
+import { CajeroModal, type WalletSnapshot } from "../components/CajeroModal";
+import { MatchHistoryModal } from "../components/MatchHistoryModal";
+import { TopBar } from "../components/TopBar";
+import { LiveTicker } from "../components/LiveTicker";
+import { StatsWidget, type ActivityStats } from "../components/StatsWidget";
+import { GameCard } from "../components/GameCard";
+import { BetChips } from "../components/BetChips";
+import { AmbientBackground } from "../components/AmbientBackground";
+
+// Cliente-solo: el feed trae "hace Xm" calculado desde Date.now() en una
+// constante de modulo. Si esto se renderiza en el servidor, el momento en
+// que el servidor evalua el modulo y el momento en que el cliente lo hace
+// al hidratar casi nunca coinciden -> el texto no calza y React tira el
+// error de hidratacion. No hay nada que SSR aporte a un widget de chat
+// puramente interactivo, asi que se desactiva de raiz.
+const LiveChatSidebar = dynamic(
+  () => import("../components/LiveChatSidebar").then((m) => m.LiveChatSidebar),
+  { ssr: false },
+);
+
+const GAME_SERVER_HTTP =
+  process.env.NEXT_PUBLIC_GAME_SERVER_HTTP ?? "http://localhost:2567";
+
+const STAKE_TIERS = [1000, 5000, 10000] as const;
+
+const GAME_META = {
+  air_hockey: {
+    title: "Air Hockey",
+    subtitle: `Reflejos en tiempo real · a ${GOALS_TO_WIN} goles`,
+    icon: Gamepad2,
+    accent: "#22e8ff",
+    accentGlow: "rgba(34, 232, 255, 0.35)",
+  },
+  mines: {
+    title: "Minas 1v1",
+    subtitle: `Azar puro, por turnos · ${MINES_LIVES} vidas`,
+    icon: Bomb,
+    accent: "#b967ff",
+    accentGlow: "rgba(185, 103, 255, 0.35)",
+  },
+} as const;
+
+/**
+ * Lobby. Entra con un usuario de prueba, muestra el saldo real leido del
+ * servidor de juego y lanza el matchmaking.
+ *
+ * El saldo que se ve aqui es informativo: quien decide si alcanza para apostar
+ * es la transaccion de escrow, no esta pantalla. Lo mismo para las metricas de
+ * ambiente (jugadores conectados, pozo de hoy, tendencia): salen de
+ * /api/activity/*, que lee directo de la base — no hay numeros inventados,
+ * salvo el tiempo de espera del matchmaking, que es una cifra ilustrativa
+ * porque todavia no se mide.
+ */
+export default function Lobby() {
+  const router = useRouter();
+  const [token, setToken] = useState<string | null>(null);
+  const [name, setName] = useState<string>("");
+  const [balance, setBalance] = useState<
+    (WalletSnapshot & { locked: number }) | null
+  >(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [game, setGame] = useState<"air_hockey" | "mines">("air_hockey");
+  const [size, setSize] = useState<MinesSize>(5);
+  const [stake, setStake] = useState<number>(STAKE_TIERS[0]);
+  const [cajeroOpen, setCajeroOpen] = useState(false);
+  const [cajeroTab, setCajeroTab] = useState<"deposit" | "withdraw">("deposit");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [activity, setActivity] = useState<ActivityStats | null>(null);
+  const [chatOpen, setChatOpen] = useState(true);
+
+  // En pantallas angostas el chat de 320px se comeria toda la pantalla:
+  // arranca colapsado ahi y abierto en escritorio.
+  useEffect(() => {
+    if (window.innerWidth < 1024) setChatOpen(false);
+  }, []);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("ah:token");
+    if (stored) {
+      setToken(stored);
+      setName(sessionStorage.getItem("ah:name") ?? "");
+    }
+  }, []);
+
+  const refreshBalance = useCallback(async (jwt: string) => {
+    try {
+      const response = await fetch(`${GAME_SERVER_HTTP}/api/me/balance`, {
+        headers: { authorization: `Bearer ${jwt}` },
+      });
+      if (!response.ok) throw new Error("no se pudo leer el saldo");
+      const data = await response.json();
+      setBalance({
+        available: data.available,
+        locked: data.locked,
+        withdrawable: data.withdrawable,
+        bonus: data.bonus,
+      });
+    } catch {
+      setError("No se pudo leer el saldo. ¿Está corriendo el game server?");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (token) void refreshBalance(token);
+  }, [token, refreshBalance]);
+
+  // Metricas de ambiente del lobby: se comparten entre el panel de stats,
+  // las tarjetas de juego (badges) y las fichas de apuesta (rake real).
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`${GAME_SERVER_HTTP}/api/activity/stats`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setActivity(data);
+      } catch {
+        // Ambiente, no critico: se reintenta en la proxima vuelta.
+      }
+    };
+    void load();
+    const id = setInterval(load, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  const login = async (user: string): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/auth/dev-login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ user }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "login fallido");
+
+      sessionStorage.setItem("ah:token", data.token);
+      sessionStorage.setItem("ah:name", data.displayName);
+      setToken(data.token);
+      setName(data.displayName);
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const logout = (): void => {
+    sessionStorage.clear();
+    setToken(null);
+    setBalance(null);
+  };
+
+  const trendingGame =
+    activity && activity.byGame.air_hockey.winsToday !== activity.byGame.mines.winsToday
+      ? activity.byGame.air_hockey.winsToday > activity.byGame.mines.winsToday
+        ? "air_hockey"
+        : "mines"
+      : null;
+
+  const canAffordStake = !!balance && balance.available >= stake;
+
+  return (
+    <>
+      <AmbientBackground leftReserved={chatOpen ? 320 : 0} />
+      <LiveChatSidebar
+        userName={token ? name : null}
+        onlineCount={activity?.online}
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+      />
+
+      <div
+        className={`relative min-h-screen z-10 transition-all duration-300 pl-0 ${chatOpen ? "lg:pl-80" : ""}`}
+      >
+        <div className="app-header">
+          <TopBar
+            authenticated={!!token}
+            name={name}
+            balanceFormatted={balance ? formatCOP(balance.available) : null}
+            onOpenCajero={() => {
+              setCajeroTab("deposit");
+              setCajeroOpen(true);
+            }}
+            onOpenHistory={() => setHistoryOpen(true)}
+            onLogout={logout}
+          />
+          <LiveTicker apiBase={GAME_SERVER_HTTP} />
+        </div>
+
+        <main className="relative z-10 max-w-6xl mx-auto px-4 py-6">
+        <h1 className="hero-title">NEON ARENA</h1>
+        <p className="hero-sub">
+          Duelos 1v1 por dinero real. El servidor es el único árbitro: tu navegador no simula
+          nada, no decide nada y no puede ganar nada mintiendo.
+        </p>
+
+        <StatsWidget stats={activity} />
+
+        {error && (
+          <div className="card" style={{ borderColor: "rgba(255,93,115,0.45)" }}>
+            <p className="note" style={{ color: "var(--danger)" }}>
+              {error}
+            </p>
+          </div>
+        )}
+
+        {!token ? (
+          <div className="card">
+            <h2>Entrar · usuarios de prueba</h2>
+            <div className="btn-row">
+              <button className="btn" onClick={() => void login("ana")} disabled={busy}>
+                Entrar como Ana
+              </button>
+              <button className="btn btn-ghost" onClick={() => void login("beto")} disabled={busy}>
+                Entrar como Beto
+              </button>
+            </div>
+            <p className="note" style={{ marginTop: "1rem" }}>
+              Abre las dos sesiones en pestañas separadas para jugar una partida completa.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="section-label">Elegir juego</p>
+            <div className="game-grid">
+              {(Object.keys(GAME_META) as Array<keyof typeof GAME_META>).map((key) => {
+                const meta = GAME_META[key];
+                const activeMatches = activity?.byGame[key]?.active ?? 0;
+                return (
+                  <GameCard
+                    key={key}
+                    title={meta.title}
+                    subtitle={meta.subtitle}
+                    icon={meta.icon}
+                    accent={meta.accent}
+                    accentGlow={meta.accentGlow}
+                    active={game === key}
+                    trending={trendingGame === key}
+                    liveCount={activity ? activeMatches * 2 : null}
+                    onSelect={() => setGame(key)}
+                  />
+                );
+              })}
+            </div>
+
+            {game === "mines" && (
+              <div className="card">
+                <h2>Tamaño del tablero</h2>
+                <div className="btn-row">
+                  {MINES_SIZES.map((option) => (
+                    <button
+                      key={option}
+                      className={size === option ? "btn" : "btn btn-ghost"}
+                      onClick={() => setSize(option)}
+                    >
+                      {option}×{option} · {minesFor(option)} minas
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="section-label">Elegir apuesta</p>
+            <BetChips
+              tiers={STAKE_TIERS}
+              selected={stake}
+              onSelect={setStake}
+              rakeBps={activity?.rakeBps ?? 500}
+              disabledBelow={balance?.available}
+              onlineByStake={activity?.byStake}
+            />
+
+            <div className="cta-wrap">
+              <button
+                className="cta-button"
+                disabled={!canAffordStake}
+                onClick={() =>
+                  router.push(
+                    game === "mines"
+                      ? `/mines?stake=${stake}&size=${size}`
+                      : `/play?stake=${stake}`,
+                  )
+                }
+              >
+                <Swords size={20} strokeWidth={2.4} aria-hidden />
+                ¡Buscar rival ahora!
+              </button>
+              <span className="cta-wait">
+                <Clock3 size={13} strokeWidth={2.2} aria-hidden />
+                Tiempo promedio de espera: ~3 segundos
+              </span>
+              {!canAffordStake && (
+                <p className="note" style={{ color: "var(--danger)" }}>
+                  Saldo insuficiente para esta apuesta.
+                </p>
+              )}
+            </div>
+
+            <p className="note" style={{ marginTop: "1.5rem" }}>
+              {game === "mines"
+                ? `A ciegas y por turnos: ${MINES_LIVES} vidas, una casilla por turno y ${MINES_TURN_SECONDS} segundos para elegir. Ninguna casilla da pistas de sus vecinas. Cada mina te cuesta una vida; te quedas sin vidas y pierdes. El tablero se fija antes de jugar y puedes verificarlo al terminar.`
+                : `Primero en llegar a ${GOALS_TO_WIN} goles. La física corre entera en el servidor.`}
+              {" "}Comisión de la casa: 5%. Si te desconectas tienes 15 segundos para volver antes
+              de perder por abandono.
+            </p>
+          </>
+        )}
+        </main>
+      </div>
+
+      {token && (
+        <>
+          <CajeroModal
+            open={cajeroOpen}
+            onClose={() => setCajeroOpen(false)}
+            initialTab={cajeroTab}
+            token={token}
+            apiBase={GAME_SERVER_HTTP}
+            balance={balance}
+            onBalanceChange={(fresh) =>
+              setBalance((prev) => ({ ...fresh, locked: prev?.locked ?? 0 }))
+            }
+          />
+          <MatchHistoryModal
+            open={historyOpen}
+            onClose={() => setHistoryOpen(false)}
+            token={token}
+            apiBase={GAME_SERVER_HTTP}
+          />
+        </>
+      )}
+    </>
+  );
+}
