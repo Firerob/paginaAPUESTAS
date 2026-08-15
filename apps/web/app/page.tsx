@@ -21,6 +21,7 @@ import { StatsWidget, type ActivityStats } from "../components/StatsWidget";
 import { GameCard } from "../components/GameCard";
 import { BetChips } from "../components/BetChips";
 import { AmbientBackground } from "../components/AmbientBackground";
+import { FallingChips } from "../components/FallingChips";
 
 // Cliente-solo: el feed trae "hace Xm" calculado desde Date.now() en una
 // constante de modulo. Si esto se renderiza en el servidor, el momento en
@@ -36,7 +37,7 @@ const LiveChatSidebar = dynamic(
 const GAME_SERVER_HTTP =
   process.env.NEXT_PUBLIC_GAME_SERVER_HTTP ?? "http://localhost:2567";
 
-const STAKE_TIERS = [1000, 5000, 10000] as const;
+const STAKE_TIERS = [1000, 5000, 10000, 20000, 50000, 100000] as const;
 
 const GAME_META = {
   air_hockey: {
@@ -183,6 +184,8 @@ export default function Lobby() {
   return (
     <>
       <AmbientBackground leftReserved={chatOpen ? 320 : 0} />
+      <FallingChips side="right" leftReserved={chatOpen ? 320 : 0} />
+      <FallingChips side="left" leftReserved={chatOpen ? 320 : 0} />
       <LiveChatSidebar
         userName={token ? name : null}
         onlineCount={activity?.online}

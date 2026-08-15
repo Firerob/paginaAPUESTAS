@@ -29,6 +29,11 @@
   --gold: #ffcf5c;
   --danger: #ff5d73;
   --purple: #b967ff;
+  /* Fichas de alto valor (50.000 / 100.000): paleta mas fria y contenida
+     que el resto del neon, para que se lean como "exclusivas" en vez de
+     simplemente otro color mas del ciclo. */
+  --platinum: #cbd5e1;
+  --ruby: #e11d48;
 
   --font-display: var(--font-orbitron), "Segoe UI", system-ui, sans-serif;
   --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;

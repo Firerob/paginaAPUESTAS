@@ -19,7 +19,18 @@ interface BetChipsProps {
   onlineByStake?: Record<number, number>;
 }
 
-const CHIP_COLORS = ["var(--self)", "var(--cyan)", "var(--gold)", "var(--purple)"] as const;
+// Una entrada por apuesta, en el mismo orden que STAKE_TIERS en page.tsx.
+// Las dos ultimas (50.000 y 100.000) usan una paleta mas fria y contenida
+// a proposito, para que se lean como fichas de alto valor, no solo otro
+// color mas del ciclo.
+const CHIP_COLORS = [
+  "var(--self)", // 1.000
+  "var(--cyan)", // 5.000
+  "var(--gold)", // 10.000
+  "var(--purple)", // 20.000
+  "var(--platinum)", // 50.000
+  "var(--ruby)", // 100.000
+] as const;
 
 /** Selector de apuesta estilo fichas de casino, con la ganancia neta ya calculada. */
 export function BetChips({

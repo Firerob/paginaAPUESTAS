@@ -8,7 +8,7 @@ import { MinesRoom } from "./MinesRoom";
 import type { BaseMatchRoom, RoomPlayer } from "./BaseMatchRoom";
 
 /** Apuestas permitidas. El cliente elige de esta lista; no propone montos. */
-export const STAKE_TIERS = [1000, 5000, 10000] as const;
+export const STAKE_TIERS = [1000, 5000, 10000, 20000, 50000, 100000] as const;
 
 /** Juegos que aceptan conexiones. */
 const GAME_TYPES: GameType[] = ["air_hockey", "mines"];
