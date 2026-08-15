@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { animate } from "framer-motion";
 import { Radio, Trophy, Users } from "lucide-react";
-import { formatCOP } from "@ah/shared";
+import { formatCOP, type GameType } from "@ah/shared";
 
 export interface GameActivity {
   active: number;
@@ -15,12 +15,12 @@ export interface ActivityStats {
   potToday: number;
   activeMatches: number;
   rakeBps: number;
-  byGame: Record<"air_hockey" | "mines", GameActivity>;
+  byGame: Record<GameType, GameActivity>;
   /**
    * Jugadores en cola o ya emparejados, por JUEGO y monto de apuesta.
-   * Air Hockey y Minas nunca se suman entre si.
+   * Los juegos nunca se suman entre si.
    */
-  byStake: Record<"air_hockey" | "mines", Record<number, number>>;
+  byStake: Record<GameType, Record<number, number>>;
   /** Solo Minas: jugadores en cola o emparejados por tamaño de tablero. */
   minesByBoard: Record<number, number>;
   /** Solo Minas: lo mismo, pero ademas separado por apuesta dentro de cada tablero. */

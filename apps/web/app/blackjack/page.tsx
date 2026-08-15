@@ -2,23 +2,18 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { MINES_SIZES, STAKE_TIERS, type MinesSize } from "@ah/shared";
-import MinesBoard from "@/components/MinesBoard";
+import { STAKE_TIERS } from "@ah/shared";
+import BlackjackArena from "@/components/BlackjackArena";
 
 /**
- * Va directo al tablero: la eleccion de apuesta y tamaño ya se hizo en el
- * lobby (llega como `?stake=&size=` en la URL). Esta pantalla ya no vuelve
- * a preguntar nada — su unico trabajo es validar sesion y lanzar la
- * conexion real. El servidor vuelve a validar `stake`/`size` contra su
- * propia lista antes de cobrar nada, asi que esto es solo para no mandar
- * un valor absurdo en el primer mensaje.
+ * Va directo a la mesa: la apuesta ya se eligio en el lobby (llega como
+ * `?stake=` en la URL). Mismo patron que /mines y /play — sin pantalla de
+ * confirmacion intermedia.
  */
-function MinesInner() {
+function BlackjackInner() {
   const params = useSearchParams();
   const [token, setToken] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  // Cambiar la key fuerza un remount completo de MinesBoard: repite el
-  // mismo flujo de conexion probado (nueva partida, mismos parametros).
   const [matchKey, setMatchKey] = useState(0);
   const rematch = useCallback(() => setMatchKey((key) => key + 1), []);
 
@@ -31,9 +26,6 @@ function MinesInner() {
   const stake = (STAKE_TIERS as readonly number[]).includes(requestedStake)
     ? requestedStake
     : STAKE_TIERS[0];
-
-  const requestedSize = Number(params.get("size") ?? 5) as MinesSize;
-  const size: MinesSize = MINES_SIZES.includes(requestedSize) ? requestedSize : 5;
 
   if (!ready) return null;
 
@@ -49,13 +41,13 @@ function MinesInner() {
     );
   }
 
-  return <MinesBoard key={matchKey} token={token} stake={stake} size={size} onRematch={rematch} />;
+  return <BlackjackArena key={matchKey} token={token} stake={stake} onRematch={rematch} />;
 }
 
-export default function MinesPage() {
+export default function BlackjackPage() {
   return (
     <Suspense fallback={null}>
-      <MinesInner />
+      <BlackjackInner />
     </Suspense>
   );
 }

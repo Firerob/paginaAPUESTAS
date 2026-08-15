@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Bomb, Clock3, Gamepad2, Swords } from "lucide-react";
+import { Bomb, Clock3, Gamepad2, Spade, Swords } from "lucide-react";
 import {
+  BLACKJACK_LIVES,
   GOALS_TO_WIN,
   MINES_LIVES,
   MINES_SIZES,
   MINES_TURN_SECONDS,
+  STAKE_TIERS,
   formatCOP,
   minesFor,
   type MinesSize,
@@ -37,8 +39,6 @@ const LiveChatSidebar = dynamic(
 const GAME_SERVER_HTTP =
   process.env.NEXT_PUBLIC_GAME_SERVER_HTTP ?? "http://localhost:2567";
 
-const STAKE_TIERS = [1000, 5000, 10000, 20000, 50000, 100000] as const;
-
 const GAME_META = {
   air_hockey: {
     title: "Air Hockey",
@@ -53,6 +53,13 @@ const GAME_META = {
     icon: Bomb,
     accent: "#b967ff",
     accentGlow: "rgba(185, 103, 255, 0.35)",
+  },
+  blackjack: {
+    title: "Blackjack Arena",
+    subtitle: `Manos 1v1 con revelación final · ${BLACKJACK_LIVES} vidas`,
+    icon: Spade,
+    accent: "#e11d48",
+    accentGlow: "rgba(225, 29, 72, 0.35)",
   },
 } as const;
 
@@ -76,7 +83,7 @@ export default function Lobby() {
   >(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [game, setGame] = useState<"air_hockey" | "mines">("air_hockey");
+  const [game, setGame] = useState<"air_hockey" | "mines" | "blackjack">("air_hockey");
   const [size, setSize] = useState<MinesSize>(5);
   const [stake, setStake] = useState<number>(STAKE_TIERS[0]);
   const [cajeroOpen, setCajeroOpen] = useState(false);
@@ -172,12 +179,19 @@ export default function Lobby() {
     setBalance(null);
   };
 
-  const trendingGame =
-    activity && activity.byGame.air_hockey.winsToday !== activity.byGame.mines.winsToday
-      ? activity.byGame.air_hockey.winsToday > activity.byGame.mines.winsToday
-        ? "air_hockey"
-        : "mines"
-      : null;
+  const trendingGame = (() => {
+    if (!activity) return null;
+    const entries = (Object.keys(GAME_META) as Array<keyof typeof GAME_META>).map((key) => ({
+      key,
+      wins: activity.byGame[key]?.winsToday ?? 0,
+    }));
+    const max = Math.max(...entries.map((e) => e.wins));
+    if (max <= 0) return null;
+    const leaders = entries.filter((e) => e.wins === max);
+    // Empate entre dos o mas juegos: nadie "tendencia", para no inventar un
+    // ganador que no existe.
+    return leaders.length === 1 ? leaders[0].key : null;
+  })();
 
   const canAffordStake = !!balance && balance.available >= stake;
 
@@ -308,7 +322,9 @@ export default function Lobby() {
                   router.push(
                     game === "mines"
                       ? `/mines?stake=${stake}&size=${size}`
-                      : `/play?stake=${stake}`,
+                      : game === "blackjack"
+                        ? `/blackjack?stake=${stake}`
+                        : `/play?stake=${stake}`,
                   )
                 }
               >
@@ -329,7 +345,9 @@ export default function Lobby() {
             <p className="note" style={{ marginTop: "1.5rem" }}>
               {game === "mines"
                 ? `A ciegas y por turnos: ${MINES_LIVES} vidas, una casilla por turno y ${MINES_TURN_SECONDS} segundos para elegir. Ninguna casilla da pistas de sus vecinas. Cada mina te cuesta una vida; te quedas sin vidas y pierdes. El tablero se fija antes de jugar y puedes verificarlo al terminar.`
-                : `Primero en llegar a ${GOALS_TO_WIN} goles. La física corre entera en el servidor.`}
+                : game === "blackjack"
+                  ? `${BLACKJACK_LIVES} vidas por partida. Blackjack natural gana la ronda en el acto; si los dos se plantan, se revelan las cartas ocultas y el puntaje menor pierde 1 vida. Empate exacto no cuesta nada.`
+                  : `Primero en llegar a ${GOALS_TO_WIN} goles. La física corre entera en el servidor.`}
               {" "}Comisión de la casa: 5%. Si te desconectas tienes 15 segundos para volver antes
               de perder por abandono.
             </p>

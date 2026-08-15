@@ -1,8 +1,7 @@
 import { Router, type Request, type Response } from "express";
-import { MINES_SIZES, type GameType } from "@ah/shared";
+import { MINES_SIZES, STAKE_TIERS, type GameType } from "@ah/shared";
 import { pool } from "../db/pool";
 import { env } from "../config/env";
-import { STAKE_TIERS } from "../rooms/MatchManager";
 import { connectedCount } from "../services/presence";
 import { getQueueSnapshot } from "../services/queue-stats";
 
@@ -70,6 +69,7 @@ activityRoutes.get("/api/activity/stats", async (_req: Request, res: Response) =
   const byGame: Record<string, { active: number; winsToday: number }> = {
     air_hockey: { active: 0, winsToday: 0 },
     mines: { active: 0, winsToday: 0 },
+    blackjack: { active: 0, winsToday: 0 },
   };
   for (const row of byGameRows) {
     byGame[row.game_type] = { active: row.active, winsToday: row.wins_today };
@@ -80,8 +80,9 @@ activityRoutes.get("/api/activity/stats", async (_req: Request, res: Response) =
   const byStake: Record<GameType, Record<number, number>> = {
     air_hockey: {},
     mines: {},
+    blackjack: {},
   };
-  for (const game of ["air_hockey", "mines"] as GameType[]) {
+  for (const game of ["air_hockey", "mines", "blackjack"] as GameType[]) {
     for (const tier of STAKE_TIERS) byStake[game][tier] = queue.byGameStake[game][tier] ?? 0;
   }
   for (const row of byGameStakeRows) {
@@ -125,7 +126,7 @@ activityRoutes.get("/api/activity/recent-wins", async (req: Request, res: Respon
   const { rows } = await pool.query<{
     display_name: string;
     payout: number;
-    game_type: "air_hockey" | "mines";
+    game_type: GameType;
     settled_at: Date;
   }>(
     `SELECT u.display_name, m.payout, m.game_type, m.settled_at

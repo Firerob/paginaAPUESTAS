@@ -12,7 +12,7 @@ const RESUME_KEY = "ah:resumeToken";
 export interface ConnectOptions {
   stake: number;
   /** Juego al que se quiere entrar. */
-  game?: "air_hockey" | "mines";
+  game?: "air_hockey" | "mines" | "blackjack";
   /** Solo para mines: lado del tablero. */
   size?: number;
 }

@@ -1,17 +1,15 @@
 import type { Server as IOServer, Socket } from "socket.io";
-import { MINES_SIZES, ServerMessage, type GameType, type MinesSize } from "@ah/shared";
+import { MINES_SIZES, STAKE_TIERS, ServerMessage, type GameType, type MinesSize } from "@ah/shared";
 import { pool } from "../db/pool";
 import { hasFunds } from "../services/wallet.service";
 import { setQueueSnapshot } from "../services/queue-stats";
 import { AirHockeyRoom } from "./AirHockeyRoom";
 import { MinesRoom } from "./MinesRoom";
+import { BlackjackRoom } from "./BlackjackRoom";
 import type { BaseMatchRoom, RoomPlayer } from "./BaseMatchRoom";
 
-/** Apuestas permitidas. El cliente elige de esta lista; no propone montos. */
-export const STAKE_TIERS = [1000, 5000, 10000, 20000, 50000, 100000] as const;
-
 /** Juegos que aceptan conexiones. */
-const GAME_TYPES: GameType[] = ["air_hockey", "mines"];
+const GAME_TYPES: GameType[] = ["air_hockey", "mines", "blackjack"];
 
 interface QueueEntry {
   socket: Socket;
@@ -104,7 +102,7 @@ export class MatchManager {
   private queueKey(entry: Pick<QueueEntry, "gameType" | "stake" | "size">): string {
     return entry.gameType === "mines"
       ? `mines:${entry.stake}:${entry.size}`
-      : `air_hockey:${entry.stake}`;
+      : `${entry.gameType}:${entry.stake}`;
   }
 
   private enqueue(entry: QueueEntry): void {
@@ -152,7 +150,11 @@ export class MatchManager {
    * si — son colas separadas y el lobby las tiene que mostrar separadas.
    */
   private syncQueueStats(): void {
-    const byGameStake: Record<GameType, Record<number, number>> = { air_hockey: {}, mines: {} };
+    const byGameStake: Record<GameType, Record<number, number>> = {
+      air_hockey: {},
+      mines: {},
+      blackjack: {},
+    };
     const minesBySize: Record<number, number> = {};
     const minesBySizeStake: Record<number, Record<number, number>> = {};
 
@@ -183,7 +185,9 @@ export class MatchManager {
     const room: BaseMatchRoom =
       a.gameType === "mines"
         ? new MinesRoom(a.stake, a.size, (finished) => this.disposeRoom(finished))
-        : new AirHockeyRoom(a.stake, (finished) => this.disposeRoom(finished));
+        : a.gameType === "blackjack"
+          ? new BlackjackRoom(a.stake, (finished) => this.disposeRoom(finished))
+          : new AirHockeyRoom(a.stake, (finished) => this.disposeRoom(finished));
 
     this.rooms.set(room.id, room);
 

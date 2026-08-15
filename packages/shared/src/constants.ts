@@ -72,6 +72,15 @@ export const MALLET_MAX_SPEED = 1400;
 /** Techo de mensajes de input aceptados por segundo y por cliente. */
 export const INPUT_RATE_LIMIT_HZ = 90;
 
+/**
+ * Apuestas permitidas, para los dos juegos. Unica fuente de verdad: antes
+ * vivia duplicada (con distintos valores desactualizados) en el lobby, en
+ * game-server/MatchManager y en las paginas /play y /mines — bastaba con
+ * agregar un monto nuevo en un solo lugar para que las demas paginas lo
+ * rechazaran en silencio y cayeran a 1.000 sin avisar.
+ */
+export const STAKE_TIERS = [1000, 5000, 10000, 20000, 50000, 100000] as const;
+
 /** Asiento 0 defiende abajo (y = FIELD_HEIGHT). Asiento 1 defiende arriba (y = 0). */
 export type Seat = 0 | 1;
 

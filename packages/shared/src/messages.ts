@@ -58,7 +58,7 @@ export interface PongPayload {
 }
 
 /** Juegos disponibles en la plataforma. */
-export type GameType = "air_hockey" | "mines";
+export type GameType = "air_hockey" | "mines" | "blackjack";
 
 export interface JoinedPayload {
   matchId: string;

@@ -2,9 +2,8 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { STAKE_TIERS } from "@ah/shared";
 import GameCanvas from "@/components/GameCanvas";
-
-const ALLOWED_STAKES = [1000, 5000, 10000];
 
 function PlayInner() {
   const params = useSearchParams();
@@ -21,8 +20,8 @@ function PlayInner() {
     setReady(true);
   }, []);
 
-  const requested = Number(params.get("stake") ?? 1000);
-  const stake = ALLOWED_STAKES.includes(requested) ? requested : 1000;
+  const requested = Number(params.get("stake") ?? STAKE_TIERS[0]);
+  const stake = (STAKE_TIERS as readonly number[]).includes(requested) ? requested : STAKE_TIERS[0];
 
   if (!ready) return null;
 

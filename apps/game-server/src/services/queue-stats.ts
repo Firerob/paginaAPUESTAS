@@ -20,7 +20,7 @@ export interface QueueSnapshot {
 }
 
 const EMPTY: QueueSnapshot = {
-  byGameStake: { air_hockey: {}, mines: {} },
+  byGameStake: { air_hockey: {}, mines: {}, blackjack: {} },
   minesBySize: {},
   minesBySizeStake: {},
 };

@@ -174,7 +174,7 @@ export interface MinesFairnessPayload {
  * Este PRNG solo garantiza que, dada la semilla, cualquiera llega al MISMO
  * tablero: sin eso la verificacion seria imposible.
  */
-function xoshiro128(a: number, b: number, c: number, d: number): () => number {
+export function xoshiro128(a: number, b: number, c: number, d: number): () => number {
   return () => {
     const t = (b << 9) >>> 0;
     let r = Math.imul(b, 5);
