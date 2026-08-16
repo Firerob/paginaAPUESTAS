@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { Coins, Dices, Heart, Lock, Volume2, VolumeX, Wallet } from "lucide-react";
 import {
   BLACKJACK_LIVES,
-  BLACKJACK_MAX_TIMEOUTS,
+  BLACKJACK_ROULETTE_COUNTDOWN_MS,
+  BLACKJACK_ROULETTE_FADE_MS,
+  BLACKJACK_ROULETTE_RESULT_MS,
+  BLACKJACK_ROULETTE_SPIN_MS,
   BLACKJACK_TURN_SECONDS,
   BlackjackClientMessage,
   BlackjackServerMessage,
@@ -81,6 +84,7 @@ export default function BlackjackArena({ token, stake, onRematch }: Props) {
   const [breaking, setBreaking] = useState<Record<number, number>>({});
   const [turnLeft, setTurnLeft] = useState(BLACKJACK_TURN_SECONDS * 1000);
   const [roundsWon, setRoundsWon] = useState(0);
+  const [roulette, setRoulette] = useState<{ round: number; startingSeat: Seat } | null>(null);
 
   const showBanner = useCallback((text: string, tone: Banner["tone"], sub?: string) => {
     setBanner({ id: ++bannerIdRef.current, text, tone, sub });
@@ -123,11 +127,13 @@ export default function BlackjackArena({ token, stake, onRematch }: Props) {
       setState(next);
       turnDeadlineRef.current = performance.now() + next.turnMs;
       setTurnLeft(next.turnMs);
+      // En cuanto llegan cartas, la ruleta ya cumplio su parte: se retira
+      // para dejarle la mesa al reparto.
+      if (next.myHand.length > 0) setRoulette(null);
     });
 
     socket.on(BlackjackServerMessage.ROULETTE, (payload: BlackjackRoulettePayload) => {
-      const mine = payload.startingSeat === mySeatRef.current;
-      showBanner(mine ? "¡EMPIEZAS TÚ!" : "¡EMPIEZA TU RIVAL!", "neutral", `Ronda ${payload.round}`);
+      setRoulette({ round: payload.round, startingSeat: payload.startingSeat });
       gameAudio.play("countdown");
     });
 
@@ -188,14 +194,15 @@ export default function BlackjackArena({ token, stake, onRematch }: Props) {
 
     socket.on(BlackjackServerMessage.TIMEOUT, (payload: BlackjackTimeoutPayload) => {
       const mine = payload.seat === mySeatRef.current;
-      gameAudio.play("defeat");
+      markBrokenHeart(payload.seat);
+      gameAudio.play(mine ? "defeat" : "goal");
+      shake();
       showBanner(
-        mine ? "SE TE ACABÓ EL TIEMPO" : "AL RIVAL SE LE ACABÓ EL TIEMPO",
-        "neutral",
-        mine && payload.strikes >= BLACKJACK_MAX_TIMEOUTS - 1
-          ? "Otra ausencia y pierdes por abandono"
-          : "Te plantaste automáticamente",
+        mine ? "¡SE TE ACABÓ EL TIEMPO!" : "¡AL RIVAL SE LE ACABÓ EL TIEMPO!",
+        mine ? "lose" : "goal",
+        "Pierde la ronda quien no juega a tiempo",
       );
+      if (!mine) setRoundsWon((n) => n + 1);
     });
 
     socket.on(BlackjackServerMessage.REJECTED, (payload: { reason: string }) => {
@@ -293,7 +300,16 @@ export default function BlackjackArena({ token, stake, onRematch }: Props) {
   const showdownActive = state?.phase === "showdown";
 
   return (
-    <div className={`game-shell ${shaking ? "shake" : ""}`} onPointerDown={() => gameAudio.unlock()}>
+    <div className={`game-shell bj-arena ${shaking ? "shake" : ""}`} onPointerDown={() => gameAudio.unlock()}>
+      {roulette && (
+        <RouletteOverlay
+          round={roulette.round}
+          startingSeat={roulette.startingSeat}
+          mySeat={mySeat}
+          opponentName={opponentName}
+        />
+      )}
+
       <header className="hud">
         <div className="hud-side">
           <span className="chip chip-gold">{formatCOP(stake)}</span>
@@ -429,6 +445,138 @@ export default function BlackjackArena({ token, stake, onRematch }: Props) {
           roundsWon={roundsWon}
           onRematch={onRematch}
         />
+      </div>
+    </div>
+  );
+}
+
+type RoulettePhase = "counting" | "spinning" | "result" | "closing";
+
+/**
+ * Overlay a pantalla completa del sorteo INICIAL de la partida (solo pasa
+ * una vez, en la ronda 1 — ver `BlackjackRoom.startRound`). Tapa toda la
+ * mesa (`fixed inset-0`, fondo casi opaco + blur) hasta que se sabe quien
+ * arranca: una moneda 3D gigante con cara TÚ (cyan) y cara RIVAL (magenta)
+ * gira sobre su eje y frena mostrando la cara ganadora, que ya decidio el
+ * servidor (`startingSeat` llega ya resuelto al montar este componente —
+ * esto es la puesta en escena, no el sorteo en si, que ya salio
+ * determinista de la semilla de la partida). Los dos jugadores reciben el
+ * mismo evento ROULETTE al mismo tiempo y corren la misma animacion con los
+ * mismos tiempos, asi que ven la misma moneda parar en el mismo resultado a
+ * la vez — no es cosmetica de un solo lado.
+ *
+ * Fases: cuenta regresiva -> giro -> resultado quieto -> fade out. La suma
+ * de las cuatro (`BLACKJACK_ROULETTE_MS`) es exactamente cuanto espera el
+ * servidor antes de repartir, asi que el overlay siempre termina de
+ * desvanecerse justo cuando las cartas ya estan listas debajo.
+ */
+function RouletteOverlay({
+  round,
+  startingSeat,
+  mySeat,
+  opponentName,
+}: {
+  round: number;
+  startingSeat: Seat;
+  mySeat: Seat;
+  opponentName: string;
+}) {
+  const [phase, setPhase] = useState<RoulettePhase>("counting");
+  const [countLeft, setCountLeft] = useState(Math.ceil(BLACKJACK_ROULETTE_COUNTDOWN_MS / 1000));
+
+  useEffect(() => {
+    setPhase("counting");
+    const startedAt = performance.now();
+    setCountLeft(Math.ceil(BLACKJACK_ROULETTE_COUNTDOWN_MS / 1000));
+
+    const tick = setInterval(() => {
+      const left = BLACKJACK_ROULETTE_COUNTDOWN_MS - (performance.now() - startedAt);
+      setCountLeft(Math.max(1, Math.ceil(left / 1000)));
+    }, 200);
+
+    const spinTimer = setTimeout(() => {
+      clearInterval(tick);
+      setPhase("spinning");
+    }, BLACKJACK_ROULETTE_COUNTDOWN_MS);
+
+    const resultTimer = setTimeout(
+      () => setPhase("result"),
+      BLACKJACK_ROULETTE_COUNTDOWN_MS + BLACKJACK_ROULETTE_SPIN_MS,
+    );
+
+    const closeTimer = setTimeout(
+      () => setPhase("closing"),
+      BLACKJACK_ROULETTE_COUNTDOWN_MS + BLACKJACK_ROULETTE_SPIN_MS + BLACKJACK_ROULETTE_RESULT_MS,
+    );
+
+    return () => {
+      clearInterval(tick);
+      clearTimeout(spinTimer);
+      clearTimeout(resultTimer);
+      clearTimeout(closeTimer);
+    };
+  }, [round]);
+
+  const mine = startingSeat === mySeat;
+  const rivalLabel = (opponentName || "TU RIVAL").toUpperCase();
+  const winnerName = mine ? "TÚ" : rivalLabel;
+
+  // La cara frontal (0deg) siempre es "TÚ" y la trasera (180deg) siempre es
+  // "RIVAL" — fijo por jugador, no depende del resultado. Para aterrizar en
+  // la cara correcta basta con dar un numero entero de vueltas completas (mi
+  // cara gana) o esas vueltas + media (gana la cara del rival). El numero de
+  // vueltas y el pequeño temblor son puramente cosmeticos: el resultado real
+  // ya lo decidio el servidor antes de que este componente exista.
+  const rotationY = useMemo(() => {
+    const flips = 5 + Math.floor(Math.random() * 3);
+    const jitter = (Math.random() - 0.5) * 10;
+    return flips * 360 + (mine ? 0 : 180) + jitter;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round, mine]);
+
+  const spinning = phase === "spinning" || phase === "result" || phase === "closing";
+
+  return (
+    <div
+      className={`bj-roulette-overlay ${phase === "closing" ? "bj-roulette-overlay-closing" : ""}`}
+      style={{ transitionDuration: `${BLACKJACK_ROULETTE_FADE_MS}ms` }}
+    >
+      <p
+        className={`bj-roulette-title ${phase === "result" || phase === "closing" ? "bj-roulette-title-result" : ""}`}
+      >
+        {phase === "result" || phase === "closing" ? `¡${winnerName} INICIA EL TURNO!` : "SELECCIONANDO QUIÉN COMIENZA…"}
+      </p>
+
+      <div className="bj-roulette-coin-scene">
+        {(phase === "result" || phase === "closing") && <div key={round} className="bj-roulette-flash" aria-hidden />}
+
+        <div className="bj-roulette-pointer" aria-hidden />
+
+        <div className="bj-roulette-coin-rim">
+          <div
+            className={`bj-roulette-coin ${spinning ? "bj-roulette-coin-spin" : ""}`}
+            style={{ transform: `rotateY(${spinning ? rotationY : 0}deg)` }}
+          >
+            <div
+              className={`bj-roulette-coin-face bj-roulette-coin-face-self ${phase === "counting" ? "bj-roulette-coin-face-blank" : ""}`}
+            >
+              <Dices size={40} strokeWidth={2} aria-hidden />
+              <span>TÚ</span>
+            </div>
+            <div
+              className={`bj-roulette-coin-face bj-roulette-coin-face-rival ${phase === "counting" ? "bj-roulette-coin-face-blank" : ""}`}
+            >
+              <Dices size={40} strokeWidth={2} aria-hidden />
+              <span>{rivalLabel.slice(0, 10)}</span>
+            </div>
+          </div>
+        </div>
+
+        {phase === "counting" && (
+          <div className="bj-roulette-countdown" key={countLeft} role="status" aria-live="polite">
+            {countLeft}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 import type { Socket } from "socket.io";
 import {
   BLACKJACK_LIVES,
-  BLACKJACK_MAX_TIMEOUTS,
+  BLACKJACK_ROULETTE_MS,
   BLACKJACK_SHOWDOWN_MS,
   BLACKJACK_TURN_SECONDS,
   BlackjackClientMessage,
@@ -73,6 +73,8 @@ export class BlackjackRoom extends BaseMatchRoom {
 
   private phase: BlackjackPhase = "waiting";
   private startingSeat: Seat = 0;
+  /** Resultado del UNICO sorteo de la partida (ronda 1). Ver `startRound`. */
+  private initialStartingSeat: Seat = 0;
   private currentTurnSeat: Seat = 0;
   private turnEndsAt = 0;
   private turnLoop: NodeJS.Timeout | null = null;
@@ -95,7 +97,6 @@ export class BlackjackRoom extends BaseMatchRoom {
     return {
       lives: BLACKJACK_LIVES,
       turnSeconds: BLACKJACK_TURN_SECONDS,
-      maxTimeouts: BLACKJACK_MAX_TIMEOUTS,
     };
   }
 
@@ -147,6 +148,19 @@ export class BlackjackRoom extends BaseMatchRoom {
   // Ronda: reparto y sorteo
   // -------------------------------------------------------------------------
 
+  /**
+   * Arranca la ronda. El sorteo (ruleta) solo pasa en la RONDA 1: decide
+   * quien arranca la partida y de ahi en adelante el turno de salida se
+   * alterna solo entre los dos, ronda a ronda, sin volver a sortear ni a
+   * mostrar la ruleta otra vez.
+   *
+   * En la ronda 1 el reparto NO pasa aca: se dispara despues de
+   * `BLACKJACK_ROULETTE_MS` en `dealCards()`, para dejarle tiempo a la
+   * cuenta regresiva + el giro de la ruleta del cliente a jugarse completos
+   * antes de que aparezcan las cartas. Los dos jugadores reciben el mismo
+   * evento al mismo tiempo, asi que la ruleta que ven es la misma y termina
+   * en el mismo resultado — no es cosmetica de un solo lado.
+   */
   private startRound(): void {
     this.round += 1;
     this.deck = deriveShuffledDeck(this.seed, this.round);
@@ -155,18 +169,43 @@ export class BlackjackRoom extends BaseMatchRoom {
     this.holeRevealed = false;
     this.done = [false, false];
     this.busted = [false, false];
-    this.locked = false;
+    this.locked = true;
     this.phase = "dealing";
 
-    // Ruleta: la primera carta del mazo ya barajado (determinista y
-    // verificable desde `seed` + `round`) decide quien arranca. No hace
-    // falta una fuente de azar aparte para el sorteo.
-    this.startingSeat = (this.deck[0] % 2) as Seat;
+    if (this.round === 1) {
+      // La primera carta del mazo ya barajado (determinista y verificable
+      // desde `seed` + `round`) decide quien arranca. No hace falta una
+      // fuente de azar aparte para el sorteo.
+      this.initialStartingSeat = (this.deck[0] % 2) as Seat;
+      this.startingSeat = this.initialStartingSeat;
+      this.currentTurnSeat = this.startingSeat;
+      void this.record("roulette", { round: this.round, startingSeat: this.startingSeat });
+      this.emitAll(BlackjackServerMessage.ROULETTE, {
+        round: this.round,
+        startingSeat: this.startingSeat,
+      });
+      // Mesa limpia (manos vacias) mientras gira la ruleta.
+      this.broadcastState();
+
+      setTimeout(() => {
+        // La sala se pudo haber cerrado durante la pausa (forfeit, caida sin
+        // reconexion, apagado del servidor): no repartir en una sala muerta.
+        if (this.settled || this.disposed) return;
+        this.dealCards();
+      }, BLACKJACK_ROULETTE_MS).unref();
+      return;
+    }
+
+    // Rondas siguientes: sin sorteo ni pausa nueva. Si en la ronda 1 arranco
+    // el asiento A, en la ronda 2 arranca el B, en la 3 otra vez A... Se
+    // reparte de una, la pausa entre rondas ya la dio `afterRoundPause`.
+    this.startingSeat = ((this.initialStartingSeat + (this.round - 1)) % 2) as Seat;
     this.currentTurnSeat = this.startingSeat;
-    this.emitAll(BlackjackServerMessage.ROULETTE, {
-      round: this.round,
-      startingSeat: this.startingSeat,
-    });
+    this.dealCards();
+  }
+
+  private dealCards(): void {
+    this.locked = false;
 
     // Reparto en orden: 1 visible a cada uno, despues 1 oculta a cada uno.
     this.hands[0].push(this.draw());
@@ -320,6 +359,31 @@ export class BlackjackRoom extends BaseMatchRoom {
     this.afterRoundPause();
   }
 
+  /**
+   * Se le acabo el tiempo del turno: pierde la ronda en el acto, igual que
+   * un bust. Esta es la UNICA consecuencia de quedarse sin tiempo — nunca
+   * abandono ni fin de partida instantaneo, eso solo pasa por una
+   * desconexion real (ver `disconnectedPlayer` arriba y `BaseMatchRoom`).
+   */
+  private resolveTimeout(seat: Seat, strikes: number): void {
+    this.holeRevealed = true;
+    this.phase = "showdown";
+    this.locked = true;
+    this.broadcastState();
+
+    const livesAfter = this.applyLifeLoss(seat, "timeout");
+
+    this.emitAll(BlackjackServerMessage.TIMEOUT, {
+      round: this.round,
+      seat,
+      strikes,
+      hands: [this.hands[0], this.hands[1]],
+      livesAfter,
+    });
+
+    this.afterRoundPause();
+  }
+
   private showdown(): void {
     this.holeRevealed = true;
     this.phase = "showdown";
@@ -396,7 +460,11 @@ export class BlackjackRoom extends BaseMatchRoom {
 
   /**
    * Vigila el reloj del turno. Igual que en Minas: se congela con un
-   * jugador caido, para no penalizar una desconexion dos veces.
+   * jugador caido, para no penalizar una desconexion dos veces (eso lo
+   * resuelve `BaseMatchRoom` por su cuenta, con su propio plazo de
+   * reconexion). Quedarse sin tiempo estando conectado, en cambio, pierde la
+   * ronda en el acto: la unica consecuencia es perder 1 vida, nunca el
+   * abandono de la partida completa.
    */
   private checkTurnExpiry(): void {
     if (this.phase !== "playing" || this.locked) return;
@@ -411,25 +479,8 @@ export class BlackjackRoom extends BaseMatchRoom {
     if (!player || !own) return;
 
     own.timeouts += 1;
-    this.emitAll(BlackjackServerMessage.TIMEOUT, { seat: player.seat, strikes: own.timeouts });
     void this.record("timeout", { round: this.round, seat: player.seat, strikes: own.timeouts }, player);
-
-    // Ausencias seguidas se consideran abandono, igual que en Minas: sin
-    // esto alguien podria dejar la partida colgada con dinero bloqueado.
-    if (own.timeouts >= BLACKJACK_MAX_TIMEOUTS) {
-      const rival = this.opponentOf(player);
-      this.phase = "finished";
-      this.publishFairness();
-      void this.record("abandon_afk", { seat: player.seat }, player);
-      if (rival) void this.endMatch(rival, "abandon");
-      else void this.abortMatch("error");
-      return;
-    }
-
-    // No jugar es plantarse: a diferencia de Minas (donde CUALQUIER accion
-    // cuesta algo), aca "no pedir mas" es una jugada valida y no cuesta vida
-    // por si sola. Lo unico que castiga la ausencia repetida es el abandono.
-    this.stand(player, true);
+    this.resolveTimeout(player.seat, own.timeouts);
   }
 
   // -------------------------------------------------------------------------

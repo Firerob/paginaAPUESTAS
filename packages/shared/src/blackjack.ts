@@ -12,13 +12,21 @@
  * - Blackjack natural (21 con las 2 cartas iniciales) gana la ronda en el
  *   acto: se revela la mano del rival y pierde 1 vida sin jugar turno. Si
  *   los dos sacan blackjack a la vez, empate: nadie pierde vida.
- * - Turnos: quien sale sorteado juega su mano entera (PEDIR CARTA las veces
- *   que quiera, o PLANTARSE) antes de pasarle el turno al rival. Pasarse de
- *   21 (bust) pierde la ronda en el acto y revela las dos manos.
+ * - El sorteo de quien arranca la partida (ruleta) solo pasa UNA VEZ, en la
+ *   ronda 1. De ahi en adelante el turno de salida se ALTERNA solo entre los
+ *   dos jugadores ronda a ronda — no se vuelve a sortear.
+ * - Turnos: quien sale sorteado (o le toca por alternancia) juega su mano
+ *   entera (PEDIR CARTA las veces que quiera, o PLANTARSE) antes de pasarle
+ *   el turno al rival. Pasarse de 21 (bust) pierde la ronda en el acto y
+ *   revela las dos manos.
  * - Cuando los dos se plantan sin pasarse: SHOWDOWN. Se revelan las cartas
  *   ocultas, se comparan los totales, y el menor pierde 1 vida (empate exacto
  *   no le cuesta vida a nadie). Pausa de BLACKJACK_SHOWDOWN_MS antes de
  *   limpiar la mesa y repartir la siguiente ronda.
+ * - Se le acaba el tiempo del turno (BLACKJACK_TURN_SECONDS): pierde la
+ *   ronda en el acto, igual que un bust. La UNICA consecuencia de quedarse
+ *   sin tiempo es perder 1 vida — nunca abandono ni fin de partida instantaneo
+ *   (eso solo pasa por una desconexion real, no por jugar lento).
  *
  * ---------------------------------------------------------------------------
  * Que sabe el cliente
@@ -47,11 +55,39 @@ export const BLACKJACK_LIVES = 5;
 /** Segundos por turno (toda la mano: pedir cuantas veces se quiera o plantarse). */
 export const BLACKJACK_TURN_SECONDS = 20;
 
-/** Ausencias seguidas antes de perder por abandono. */
-export const BLACKJACK_MAX_TIMEOUTS = 2;
-
 /** Pausa con las cartas reveladas antes de limpiar la mesa (ms). */
 export const BLACKJACK_SHOWDOWN_MS = 3000;
+
+/**
+ * Duracion de cada fase del sorteo de turno (ms), del lado del cliente. Se
+ * muestra en un overlay a pantalla completa que tapa la mesa hasta que se
+ * sabe quien arranca.
+ *
+ * El sorteo solo pasa UNA VEZ por partida (ronda 1): de ahi en adelante
+ * quien empieza se alterna solo entre los dos jugadores, sin volver a
+ * sortear ni a mostrar el overlay otra vez. Las cuatro fases:
+ *
+ *   1. COUNTDOWN — el overlay ya esta arriba, titulo pulsando, cuenta
+ *      regresiva (3, 2, 1) antes de girar la moneda.
+ *   2. SPIN — la moneda gira sobre su eje y frena en la cara ganadora, que
+ *      ya salio determinista de la semilla de la partida (esto es la puesta
+ *      en escena, no el sorteo en si).
+ *   3. RESULT — el resultado ("¡X INICIA EL TURNO!") queda quieto un
+ *      momento antes de cerrar el overlay.
+ *   4. FADE — el overlay se desvanece y revela la mesa para el reparto.
+ *
+ * `BLACKJACK_ROULETTE_MS` es la suma de las cuatro: la unica pausa real del
+ * servidor entre el evento ROULETTE y el reparto de la ronda 1.
+ */
+export const BLACKJACK_ROULETTE_COUNTDOWN_MS = 3000;
+export const BLACKJACK_ROULETTE_SPIN_MS = 3000;
+export const BLACKJACK_ROULETTE_RESULT_MS = 1500;
+export const BLACKJACK_ROULETTE_FADE_MS = 500;
+export const BLACKJACK_ROULETTE_MS =
+  BLACKJACK_ROULETTE_COUNTDOWN_MS +
+  BLACKJACK_ROULETTE_SPIN_MS +
+  BLACKJACK_ROULETTE_RESULT_MS +
+  BLACKJACK_ROULETTE_FADE_MS;
 
 // ---------------------------------------------------------------------------
 // Cartas
@@ -160,7 +196,7 @@ export const BlackjackServerMessage = {
   BUST: "blackjack:bust",
   /** Los dos se plantaron: revelacion final y comparacion de totales. */
   SHOWDOWN: "blackjack:showdown",
-  /** A alguien se le agoto el turno (se planta en automatico). */
+  /** A alguien se le agoto el turno: pierde la ronda en el acto, como un bust. */
   TIMEOUT: "blackjack:timeout",
   /** Jugada rechazada por el validador. */
   REJECTED: "blackjack:rejected",
@@ -228,8 +264,12 @@ export interface BlackjackShowdownPayload {
 }
 
 export interface BlackjackTimeoutPayload {
+  round: number;
+  /** Quien se quedo sin tiempo: pierde la ronda en el acto. */
   seat: 0 | 1;
   strikes: number;
+  hands: [Card[], Card[]];
+  livesAfter: [number, number];
 }
 
 export interface BlackjackRejectedPayload {

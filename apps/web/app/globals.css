@@ -2521,12 +2521,365 @@ body::before {
   gap: 0.7rem;
 }
 
-@media (max-width: 480px) {
-  .bj-card {
-    width: 2.9rem;
-    height: 4.1rem;
+/* ------------------------- sorteo de turno: overlay ------------------------ */
+
+.bj-roulette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1.5rem, 5vw, 3rem);
+  padding: 2rem 1.2rem;
+  background: rgba(2, 3, 10, 0.95);
+  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(28px);
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+
+.bj-roulette-overlay-closing {
+  opacity: 0;
+}
+
+.bj-roulette-title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+  font-size: clamp(1.7rem, 5vw, 3.2rem);
+  animation: bj-roulette-title-pulse 1.6s ease-in-out infinite;
+}
+
+.bj-roulette-title-result {
+  animation: bj-roulette-title-pop 0.5s ease;
+  color: var(--gold);
+  text-shadow:
+    0 0 16px rgba(255, 207, 92, 0.9),
+    0 0 40px rgba(255, 207, 92, 0.55);
+}
+
+@keyframes bj-roulette-title-pulse {
+  0%,
+  100% {
+    color: #06b6d4;
+    text-shadow: 0 0 18px rgba(6, 182, 212, 0.9), 0 0 44px rgba(6, 182, 212, 0.45);
   }
-  .bj-card-rank {
-    font-size: 1rem;
+  50% {
+    color: #a855f7;
+    text-shadow: 0 0 18px rgba(168, 85, 247, 0.9), 0 0 44px rgba(168, 85, 247, 0.45);
   }
+}
+
+@keyframes bj-roulette-title-pop {
+  0% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.97);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.bj-roulette-coin-scene {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18rem;
+  height: 18rem;
+}
+
+@media (min-width: 768px) {
+  .bj-roulette-coin-scene {
+    width: 24rem;
+    height: 24rem;
+  }
+}
+
+.bj-roulette-flash {
+  position: absolute;
+  inset: -20%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.9), rgba(255, 207, 92, 0.35) 40%, transparent 72%);
+  animation: bj-roulette-flash-burst 0.8s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes bj-roulette-flash-burst {
+  0% {
+    transform: scale(0.25);
+    opacity: 0.95;
+  }
+  60% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+.bj-roulette-pointer {
+  position: absolute;
+  top: -0.2rem;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 1rem solid transparent;
+  border-right: 1rem solid transparent;
+  border-top: 1.4rem solid var(--gold);
+  filter: drop-shadow(0 0 10px rgba(255, 207, 92, 0.85));
+  z-index: 3;
+}
+
+.bj-roulette-coin-rim {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  perspective: 1400px;
+  background: conic-gradient(from 0deg, #e2e8f0, #64748b, #cbd5e1, #475569, #e2e8f0, #64748b, #e2e8f0);
+  box-shadow:
+    0 0 0 8px rgba(2, 3, 10, 0.9),
+    0 0 50px rgba(6, 182, 212, 0.35),
+    0 0 80px rgba(168, 85, 247, 0.25);
+}
+
+.bj-roulette-coin {
+  position: absolute;
+  inset: 0.6rem;
+  border-radius: 50%;
+  transform-style: preserve-3d;
+}
+
+.bj-roulette-coin-spin {
+  transition: transform 3s cubic-bezier(0.1, 0.7, 0.15, 1);
+}
+
+.bj-roulette-coin-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.1rem, 3vw, 1.6rem);
+  letter-spacing: 0.05em;
+  color: #04101a;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+/* Mientras corre la cuenta regresiva la cara queda en blanco (sin icono ni
+   texto): con ambos superpuestos en el centro del disco se veian amontonados
+   y el numero gigante de la cuenta regresiva no se leia limpio. */
+.bj-roulette-coin-face-blank {
+  opacity: 0;
+}
+
+.bj-roulette-coin-face-self {
+  background: radial-gradient(circle at 35% 28%, #a5f3fc, #06b6d4 55%, #0e7490 100%);
+  box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.3), inset 0 -20px 50px rgba(3, 7, 18, 0.35);
+}
+
+.bj-roulette-coin-face-rival {
+  background: radial-gradient(circle at 35% 28%, #e9d5ff, #a855f7 55%, #6b21a8 100%);
+  box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.28), inset 0 -20px 50px rgba(3, 7, 18, 0.35);
+  transform: rotateY(180deg);
+}
+
+.bj-roulette-countdown {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: clamp(4rem, 14vw, 7rem);
+  font-weight: 900;
+  color: var(--gold);
+  text-shadow: 0 0 30px rgba(255, 207, 92, 0.85);
+  animation: bj-roulette-countdown-pop 1s ease;
+  pointer-events: none;
+  z-index: 4;
+}
+
+@keyframes bj-roulette-countdown-pop {
+  0% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+}
+
+/* ===========================================================================
+   Blackjack — mesa a tamaño protagonico
+   Todo aca va colgado de `.bj-arena` (la raiz del componente) para no tocar
+   `.turn-banner`, `.turn-clock`, `.lives-board`/`.heart`, `.btn`, etc., que
+   son clases COMPARTIDAS con Minas y el resto de la app. La especificidad
+   del descendiente (`.bj-arena .turn-banner` > `.turn-banner`) basta para
+   ganarle a la regla base sin usar !important ni duplicar clases en el JSX.
+   ========================================================================= */
+
+.bj-arena .bj-table {
+  width: min(54rem, 100%);
+  gap: clamp(1.1rem, 2.2vw, 1.5rem);
+}
+
+.bj-arena .bj-hand {
+  padding: clamp(1.2rem, 2.8vw, 1.7rem);
+  border-radius: 18px;
+}
+
+.bj-arena .bj-hand-header {
+  gap: 0.8rem;
+}
+
+.bj-arena .bj-hand-label {
+  font-size: clamp(0.76rem, 1.4vw, 0.86rem);
+}
+
+.bj-arena .bj-total-badge {
+  font-size: clamp(0.85rem, 1.6vw, 0.96rem);
+  padding: 0.4rem 0.95rem;
+  border-radius: 12px;
+}
+
+.bj-arena .bj-cards {
+  gap: clamp(0.6rem, 1.4vw, 0.85rem);
+  min-height: clamp(6.2rem, 13vw, 8.9rem);
+}
+
+.bj-arena .bj-card {
+  width: clamp(4.3rem, 11vw, 6rem);
+  height: clamp(6rem, 15.4vw, 8.6rem);
+  border-radius: 14px;
+  gap: 0.2rem;
+}
+
+.bj-arena .bj-card-rank {
+  font-size: clamp(1.3rem, 3.4vw, 1.9rem);
+  font-weight: 900;
+}
+
+.bj-arena .bj-card-suit {
+  font-size: clamp(1.15rem, 2.9vw, 1.7rem);
+}
+
+.bj-arena .bj-card-back-glyph {
+  font-size: clamp(1.7rem, 4.2vw, 2.5rem);
+}
+
+.bj-arena .bj-divider {
+  width: clamp(2.1rem, 3.6vw, 2.5rem);
+  height: clamp(2.1rem, 3.6vw, 2.5rem);
+}
+
+/* ------------------------------ banner y reloj ----------------------------- */
+
+.bj-arena .mines-turn {
+  width: min(42rem, 100%);
+  gap: 0.7rem;
+}
+
+.bj-arena .turn-banner {
+  font-size: clamp(1.3rem, 3.6vw, 2rem);
+  padding: clamp(0.85rem, 2vw, 1.15rem) 1.4rem;
+  border-radius: 14px;
+  letter-spacing: 0.1em;
+}
+
+.bj-arena .turn-seconds {
+  font-size: clamp(1.7rem, 5vw, 2.6rem);
+  min-width: 2.9rem;
+}
+
+.bj-arena .turn-bar {
+  height: clamp(0.55rem, 1.3vw, 0.85rem);
+}
+
+/* ---------------------------------- vidas ---------------------------------- */
+
+.bj-arena .lives-board {
+  gap: clamp(0.9rem, 2vw, 1.3rem);
+}
+
+.bj-arena .lives-name {
+  font-size: clamp(0.64rem, 1.2vw, 0.74rem);
+}
+
+.bj-arena .lives-hearts {
+  gap: 0.35rem;
+}
+
+.bj-arena .lives-hearts .heart svg {
+  width: clamp(1.2rem, 2.7vw, 1.7rem);
+  height: clamp(1.2rem, 2.7vw, 1.7rem);
+}
+
+.bj-arena .lives-self .heart-on {
+  filter: drop-shadow(0 0 12px rgba(43, 255, 176, 0.9));
+}
+
+.bj-arena .lives-rival .heart-on {
+  filter: drop-shadow(0 0 12px rgba(255, 47, 142, 0.9));
+}
+
+/* -------------------------------- botones ---------------------------------- */
+
+.bj-actions {
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.bj-actions .btn {
+  padding: clamp(0.8rem, 1.8vw, 1.05rem) clamp(1.5rem, 4vw, 2.4rem);
+  font-size: clamp(0.92rem, 1.8vw, 1.1rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  border-radius: 16px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4), 0 0 16px rgba(43, 255, 176, 0.18);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.bj-actions .btn-gold {
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4), 0 0 22px rgba(255, 207, 92, 0.28);
+}
+
+.bj-actions .btn:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.bj-actions .btn:active:not(:disabled) {
+  transform: scale(0.95);
 }
