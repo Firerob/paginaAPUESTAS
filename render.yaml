@@ -18,7 +18,13 @@ services:
     plan: free
     region: oregon
     rootDir: .
-    buildCommand: npm ci && npm run build:shared && npm run build -w @ah/game-server
+    # `--include=dev`: NODE_ENV=production esta seteado abajo (correcto para
+    # runtime), pero npm respeta esa misma variable durante el install y por
+    # defecto se salta devDependencies con ella puesta — ahi viven
+    # typescript y todos los @types/*, así que el build fallaba con errores
+    # de tipos implicitos (`any`) que no son un problema del codigo, son
+    # paquetes de tipos que nunca se instalaron.
+    buildCommand: npm ci --include=dev && npm run build:shared && npm run build -w @ah/game-server
     startCommand: npm run start -w @ah/game-server
     envVars:
       - key: NODE_ENV
