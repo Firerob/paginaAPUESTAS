@@ -44,6 +44,55 @@ export interface WalletBalance {
   bonus: number;
 }
 
+/** Saldo inicial con el que aparece un usuario de demo recien creado. */
+const DEV_STARTING_BALANCE = 50_000;
+
+/**
+ * Asegura que un usuario de demo (Ana/Beto) y su wallet existan, sin pisar lo
+ * que ya haya. La usa `/api/auth/dev-login` para auto-sanarse en un entorno
+ * donde la migracion de semilla nunca corrio (p.ej. Render, donde
+ * `002_seed_dev.sql` se salta a proposito con NODE_ENV=production).
+ *
+ * Idempotente: `ON CONFLICT DO NOTHING` en usuario y wallet, y la fila del
+ * diario solo se escribe cuando la wallet se creo de verdad en esta llamada
+ * (evita duplicar el DEPOSIT si el usuario ya existia).
+ */
+export async function ensureDevUser(params: { id: string; email: string; name: string }): Promise<void> {
+  await withTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO users (id, email, display_name, status, kyc_status)
+       VALUES ($1, $2, $3, 'active', 'verified')
+       ON CONFLICT (id) DO NOTHING`,
+      [params.id, params.email, params.name],
+    );
+
+    // `withdrawable` se fija igual a `available`: es dinero de deposito, no
+    // bono (ver la regla en `applyEntry` mas arriba). A diferencia del INSERT
+    // de `002_seed_dev.sql` (que puede darse el lujo de dejar `withdrawable`
+    // en su default porque una migracion posterior, `004_cashier.sql`, hace
+    // `UPDATE wallets SET withdrawable = available` como backfill), esta
+    // funcion corre en caliente contra un esquema donde esa columna ya existe
+    // y ningun backfill futuro va a pasar por esta fila.
+    const { rows } = await client.query<{ user_id: string }>(
+      `INSERT INTO wallets (user_id, available, locked, withdrawable)
+       VALUES ($1, $2, 0, $2)
+       ON CONFLICT (user_id) DO NOTHING
+       RETURNING user_id`,
+      [params.id, DEV_STARTING_BALANCE],
+    );
+
+    if (rows.length > 0) {
+      await client.query(
+        `INSERT INTO ledger_entries
+           (user_id, kind, amount, locked_delta, balance_after, locked_after, withdrawable_after, idempotency_key, metadata)
+         VALUES ($1, 'DEPOSIT', $2, 0, $2, 0, $2, $3, '{"source":"dev-login"}'::jsonb)
+         ON CONFLICT (idempotency_key) DO NOTHING`,
+        [params.id, DEV_STARTING_BALANCE, `dev-login:deposit:${params.id}`],
+      );
+    }
+  });
+}
+
 interface WalletRow {
   user_id: string;
   available: number;

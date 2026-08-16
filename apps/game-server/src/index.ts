@@ -9,11 +9,22 @@ import { MatchManager } from "./rooms/MatchManager";
 import { startSweeper, stopSweeper } from "./services/sweeper";
 import { markConnected, markDisconnected } from "./services/presence";
 import { closePool, pool } from "./db/pool";
+import { runMigrations } from "./db/migrate";
 
 async function main(): Promise<void> {
   // Falla rapido si la base no esta lista: mejor no arrancar que aceptar
   // apuestas sin poder registrarlas.
   await pool.query("SELECT 1");
+
+  // Aplica migraciones pendientes antes de aceptar trafico. Esto reemplaza el
+  // paso manual post-deploy en Render: si el esquema todavia no existe (base
+  // recien creada), queda listo solo con el arranque del servicio. La semilla
+  // de Ana/Beto se sigue salteando aqui en produccion (ver `runMigrations`);
+  // esos dos usuarios se auto-crean bajo demanda desde `/api/auth/dev-login`.
+  const migrationsApplied = await runMigrations();
+  if (migrationsApplied > 0) {
+    console.log(`[game-server] ${migrationsApplied} migracion(es) aplicadas al arrancar`);
+  }
 
   // Se comparte entre Express y Socket.IO abajo: los dos deben aceptar
   // exactamente los mismos origenes, o el fetch pasa pero el socket no (o

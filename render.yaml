@@ -8,8 +8,11 @@
 # Uso: en Render, "New +" -> "Blueprint" -> conectar este repo. Render lee
 # este archivo y crea el web service y la base juntos.
 #
-# Despues del primer deploy hace falta un paso manual (ver el mensaje de la
-# sesion): aplicar las migraciones, incluida la semilla de Ana/Beto.
+# El propio servidor aplica las migraciones pendientes al arrancar (ver
+# `runMigrations` en src/index.ts) — no hace falta ningun paso manual despues
+# del primer deploy. La semilla de Ana/Beto (002_seed_dev.sql) se salta a
+# proposito en produccion; en su lugar, `/api/auth/dev-login` crea esos dos
+# usuarios (y su wallet) la primera vez que alguien entra con ellos.
 
 services:
   - type: web

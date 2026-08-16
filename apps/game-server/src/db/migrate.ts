@@ -5,6 +5,10 @@
  * schema_migrations. Cada archivo corre dentro de su propia transaccion: o se
  * aplica entero o no se aplica.
  *
+ * `runMigrations` se usa tanto desde la CLI (`npm run db:migrate`) como
+ * automaticamente al arrancar el servidor (ver `src/index.ts`), asi que NO
+ * cierra el pool compartido — eso queda a cargo de quien la llama.
+ *
  *   npm run db:migrate
  */
 import * as fs from "node:fs";
@@ -14,7 +18,7 @@ import { pool, withTransaction, closePool } from "./pool";
 
 const MIGRATIONS_DIR = path.join(__dirname, "migrations");
 
-async function main(): Promise<void> {
+export async function runMigrations(): Promise<number> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name        TEXT PRIMARY KEY,
@@ -50,13 +54,20 @@ async function main(): Promise<void> {
     count++;
   }
 
-  console.log(count === 0 ? "Sin migraciones pendientes." : `${count} migracion(es) aplicadas.`);
+  return count;
 }
 
-main()
-  .then(closePool)
-  .catch(async (error) => {
-    console.error("Fallo la migracion:", error);
-    await closePool();
-    process.exit(1);
-  });
+// Solo corre el CLI standalone cuando el archivo se ejecuta directamente
+// (`npm run db:migrate`), no cuando `src/index.ts` importa `runMigrations`.
+if (require.main === module) {
+  runMigrations()
+    .then((count) => {
+      console.log(count === 0 ? "Sin migraciones pendientes." : `${count} migracion(es) aplicadas.`);
+    })
+    .then(closePool)
+    .catch(async (error) => {
+      console.error("Fallo la migracion:", error);
+      await closePool();
+      process.exit(1);
+    });
+}
