@@ -14,7 +14,9 @@
     "dev": "npm run build:shared && concurrently -n server,web -c cyan,magenta \"npm run dev:server\" \"npm run dev:web\"",
     "db:up": "docker compose up -d postgres",
     "db:migrate": "npm run migrate -w @ah/game-server",
-    "build": "npm run build:shared && npm run build -w @ah/game-server && npm run build -w @ah/web"
+    "build": "npm run build:shared && npm run build -w @ah/game-server && npm run build -w @ah/web",
+    "start": "npm run start -w @ah/web",
+    "start:server": "npm run start -w @ah/game-server"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

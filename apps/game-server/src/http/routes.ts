@@ -4,6 +4,7 @@ import { getBalance } from "../services/wallet.service";
 import { pool } from "../db/pool";
 import { env } from "../config/env";
 import { requireAuth } from "./auth.middleware";
+import { authRoutes } from "./auth.routes";
 import { cashierRoutes } from "./cashier.routes";
 import { activityRoutes } from "./activity.routes";
 
@@ -44,6 +45,7 @@ routes.get("/api/me/balance", async (req: Request, res: Response) => {
   }
 });
 
+routes.use(authRoutes);
 routes.use(cashierRoutes);
 routes.use(activityRoutes);
 

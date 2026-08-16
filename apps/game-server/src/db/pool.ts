@@ -17,6 +17,11 @@ export const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
+  // `rejectUnauthorized: false` porque el Postgres administrado (Render y
+  // similares) suele presentar un certificado que la CA por defecto de Node
+  // no valida. Sigue siendo TLS (el trafico va cifrado), solo no se verifica
+  // la cadena — igual que recomienda la propia guia de Render para `pg`.
+  ssl: env.databaseSsl ? { rejectUnauthorized: false } : undefined,
 });
 
 pool.on("error", (err) => {

@@ -1,0 +1,50 @@
+# Blueprint de Render para el game-server (Socket.IO + Postgres).
+#
+# GitHub Pages solo sirve archivos estaticos: el lobby (apps/web) se publica
+# ahi via .github/workflows/deploy-pages.yml, pero el proceso que de verdad
+# corre las partidas y mueve el dinero necesita un servidor persistente —
+# este blueprint es ese servidor.
+#
+# Uso: en Render, "New +" -> "Blueprint" -> conectar este repo. Render lee
+# este archivo y crea el web service y la base juntos.
+#
+# Despues del primer deploy hace falta un paso manual (ver el mensaje de la
+# sesion): aplicar las migraciones, incluida la semilla de Ana/Beto.
+
+services:
+  - type: web
+    name: airhockey-game-server
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: .
+    buildCommand: npm ci && npm run build:shared && npm run build -w @ah/game-server
+    startCommand: npm run start -w @ah/game-server
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: airhockey-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ISSUER
+        value: airhockey-auth
+      - key: JWT_AUDIENCE
+        value: airhockey-game
+      # Cambialo por tu dominio real de GitHub Pages
+      # (https://<usuario>.github.io) apenas lo tengas.
+      - key: GAME_SERVER_ORIGIN
+        value: https://firerob.github.io
+      - key: RAKE_BPS
+        value: "500"
+      - key: HOUSE_USER_ID
+        value: "00000000-0000-0000-0000-0000000000ff"
+
+databases:
+  - name: airhockey-db
+    plan: free
+    region: oregon

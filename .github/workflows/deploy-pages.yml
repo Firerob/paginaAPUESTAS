@@ -1,0 +1,60 @@
+name: Deploy to GitHub Pages
+
+# El lobby (apps/web) se publica como export estatico en GitHub Pages. El
+# game-server (Socket.IO + Postgres) NO vive aca -- GitHub Pages solo sirve
+# archivos, no puede correr ese proceso -- se hostea aparte (Render u otro) y
+# su URL publica se pasa como variable de repo NEXT_PUBLIC_GAME_SERVER_HTTP.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Solo un deploy a la vez; uno nuevo no cancela el que ya esta sirviendo, se
+# encola detras.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build del paquete compartido
+        run: npm run build:shared
+
+      - name: Build estatico del lobby
+        working-directory: apps/web
+        env:
+          GITHUB_PAGES: "true"
+          NEXT_PUBLIC_GAME_SERVER_HTTP: ${{ vars.NEXT_PUBLIC_GAME_SERVER_HTTP }}
+        run: npx next build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

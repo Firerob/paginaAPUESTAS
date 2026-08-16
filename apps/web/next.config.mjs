@@ -9,6 +9,13 @@ import { config } from "dotenv";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 config({ path: path.join(rootDir, ".env") });
 
+// GitHub Pages sirve un repo de proyecto (no el de usuario/organizacion) bajo
+// /<repo>/, no en la raiz del dominio. Solo el workflow de deploy pone
+// GITHUB_PAGES=true — en local y en cualquier otro host `next build` sigue
+// generando rutas de raiz normales.
+const onGithubPages = process.env.GITHUB_PAGES === "true";
+const repoBasePath = "/paginaAPUESTAS";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -20,6 +27,14 @@ const nextConfig = {
   // El paquete compartido se publica como TS/CJS del workspace; Next lo
   // transpila en lugar de exigir un build previo en dev.
   transpilePackages: ["@ah/shared"],
+  // GitHub Pages es hosting puramente estatico: no puede correr `next start`
+  // ni las route handlers de la API (por eso el emisor de tokens de prueba se
+  // movio al game-server). `output: "export"` no cambia nada en `next dev`,
+  // solo lo que produce `next build`.
+  output: onGithubPages ? "export" : undefined,
+  images: { unoptimized: true },
+  basePath: onGithubPages ? repoBasePath : undefined,
+  assetPrefix: onGithubPages ? `${repoBasePath}/` : undefined,
   env: {
     // Se inyecta explicitamente porque las NEXT_PUBLIC_* se inlinean en el
     // bundle del cliente durante el build, antes de que corra el codigo de

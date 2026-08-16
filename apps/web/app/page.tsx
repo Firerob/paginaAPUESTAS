@@ -172,7 +172,11 @@ export default function Lobby() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/auth/dev-login", {
+      // El emisor de tokens vive en el game-server, no en una API route de
+      // Next.js: un export estatico (GitHub Pages) no puede correr codigo de
+      // servidor, asi que el unico proceso real que puede firmar un token es
+      // el que ya esta corriendo de verdad.
+      const response = await fetch(`${GAME_SERVER_HTTP}/api/auth/dev-login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ user }),

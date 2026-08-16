@@ -34,8 +34,21 @@ export const env = {
   jwtIssuer: process.env.JWT_ISSUER ?? "airhockey-auth",
   jwtAudience: process.env.JWT_AUDIENCE ?? "airhockey-game",
 
-  port: int("GAME_SERVER_PORT", 2567),
-  corsOrigin: process.env.GAME_SERVER_ORIGIN ?? "http://localhost:3000",
+  // Render (y la mayoria de PaaS) asignan el puerto via `PORT`: si esta
+  // presente manda sobre `GAME_SERVER_PORT`, que sigue siendo el default
+  // para desarrollo local.
+  port: int("PORT", int("GAME_SERVER_PORT", 2567)),
+  // Admite varios origenes separados por coma (ej. el lobby local +
+  // GitHub Pages a la vez) para no tener que elegir uno solo en produccion.
+  corsOrigin: (process.env.GAME_SERVER_ORIGIN ?? "http://localhost:3000")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+
+  // Postgres administrado (Render, RDS, etc.) exige TLS; el Postgres local
+  // de docker-compose no lo tiene. Nunca se activa solo: hay que pedirlo
+  // explicitamente con DATABASE_SSL=true en el entorno de hosting.
+  databaseSsl: process.env.DATABASE_SSL === "true",
 
   stakeCop: int("STAKE_COP", 1000),
   rakeBps: int("RAKE_BPS", 1000),
