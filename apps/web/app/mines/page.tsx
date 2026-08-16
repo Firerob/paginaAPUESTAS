@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MINES_SIZES, STAKE_TIERS, type MinesSize } from "@ah/shared";
 import MinesBoard from "@/components/MinesBoard";
@@ -42,9 +43,9 @@ function MinesInner() {
       <main className="lobby">
         <h1 className="lobby-title">Sesión no iniciada</h1>
         <p className="lobby-sub">Necesitas entrar antes de jugar.</p>
-        <a className="btn" href="/">
+        <Link className="btn" href="/">
           Ir al lobby
-        </a>
+        </Link>
       </main>
     );
   }

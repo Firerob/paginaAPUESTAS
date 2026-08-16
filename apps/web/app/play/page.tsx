@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { STAKE_TIERS } from "@ah/shared";
 import GameCanvas from "@/components/GameCanvas";
@@ -30,9 +31,9 @@ function PlayInner() {
       <main className="lobby">
         <h1>Sesion no iniciada</h1>
         <p className="sub">Necesitas entrar antes de jugar.</p>
-        <a className="btn" href="/">
+        <Link className="btn" href="/">
           Ir al lobby
-        </a>
+        </Link>
       </main>
     );
   }

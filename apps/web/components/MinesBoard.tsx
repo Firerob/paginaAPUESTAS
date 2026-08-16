@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { Socket } from "socket.io-client";
 import { Gem, Heart, Lock, Skull, Volume2, VolumeX, Wallet } from "lucide-react";
 import {
@@ -621,9 +622,9 @@ function MinesPanel({
           )}
           <p className="panel-line muted">Saldo: {formatCOP(result.balanceAfter)}</p>
 
-          <a className="btn" href="/">
+          <Link className="btn" href="/">
             Volver al lobby
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -643,9 +644,9 @@ function MinesPanel({
           {status.kind === "error" ? status.message : messages[status.kind]}
         </p>
         {status.kind === "error" && (
-          <a className="btn" href="/">
+          <Link className="btn" href="/">
             Volver
-          </a>
+          </Link>
         )}
       </div>
     </div>

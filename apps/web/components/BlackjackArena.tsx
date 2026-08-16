@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { Socket } from "socket.io-client";
 import { Coins, Dices, Heart, Lock, Volume2, VolumeX, Wallet } from "lucide-react";
 import {
@@ -770,9 +771,9 @@ function BlackjackPanel({
           )}
           <p className="panel-line muted">Saldo: {formatCOP(result.balanceAfter)}</p>
 
-          <a className="btn" href="/">
+          <Link className="btn" href="/">
             Volver al lobby
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -792,9 +793,9 @@ function BlackjackPanel({
           {status.kind === "error" ? status.message : messages[status.kind]}
         </p>
         {status.kind === "error" && (
-          <a className="btn" href="/">
+          <Link className="btn" href="/">
             Volver
-          </a>
+          </Link>
         )}
       </div>
     </div>

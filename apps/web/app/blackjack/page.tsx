@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { STAKE_TIERS } from "@ah/shared";
 import BlackjackArena from "@/components/BlackjackArena";
@@ -34,9 +35,9 @@ function BlackjackInner() {
       <main className="lobby">
         <h1 className="lobby-title">Sesión no iniciada</h1>
         <p className="lobby-sub">Necesitas entrar antes de jugar.</p>
-        <a className="btn" href="/">
+        <Link className="btn" href="/">
           Ir al lobby
-        </a>
+        </Link>
       </main>
     );
   }

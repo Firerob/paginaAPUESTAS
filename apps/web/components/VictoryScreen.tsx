@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { Home, RefreshCcw } from "lucide-react";
 import { formatCOP } from "@ah/shared";
 import { ConfettiSystem } from "@/lib/confetti";
@@ -155,10 +156,10 @@ export default function VictoryScreen({
             <RefreshCcw size={20} strokeWidth={2.4} aria-hidden />
             Revancha instantánea
           </button>
-          <a className="btn btn-ghost" href="/">
+          <Link className="btn btn-ghost" href="/">
             <Home size={16} strokeWidth={2.2} aria-hidden />
             Volver al lobby
-          </a>
+          </Link>
         </div>
       </div>
     </div>
