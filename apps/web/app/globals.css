@@ -1368,6 +1368,57 @@ body::before {
   overflow: hidden;
 }
 
+/* ----------------------------- auth intercept ------------------------------ */
+
+.auth-modal {
+  border-color: rgba(255, 207, 92, 0.4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 28px 90px rgba(0, 0, 0, 0.6),
+    0 0 50px rgba(255, 207, 92, 0.25),
+    0 0 90px rgba(34, 232, 255, 0.15);
+}
+
+.auth-modal-title {
+  color: var(--gold);
+  text-shadow: 0 0 18px rgba(255, 207, 92, 0.6);
+}
+
+.auth-modal-message {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.88rem;
+}
+
+.auth-modal-actions {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.auth-modal-actions .btn {
+  flex: 1;
+  min-width: 9rem;
+  justify-content: center;
+}
+
+.auth-modal-guest {
+  align-self: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.auth-modal-guest:hover {
+  color: var(--text);
+}
+
 .cajero-head {
   display: flex;
   align-items: center;
@@ -1801,6 +1852,11 @@ body::before {
   align-items: center;
   gap: 0.6rem;
   min-width: 0;
+}
+
+.topbar-auth-btn {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.72rem;
 }
 
 .topbar-balance {

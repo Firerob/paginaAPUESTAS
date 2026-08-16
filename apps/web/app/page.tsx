@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { AnimatePresence } from "framer-motion";
@@ -16,6 +16,7 @@ import {
   minesFor,
   type MinesSize,
 } from "@ah/shared";
+import { AuthInterceptModal } from "../components/AuthInterceptModal";
 import { CajeroModal, type WalletSnapshot } from "../components/CajeroModal";
 import { MatchHistoryModal } from "../components/MatchHistoryModal";
 import { TopBar } from "../components/TopBar";
@@ -93,6 +94,8 @@ export default function Lobby() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [activity, setActivity] = useState<ActivityStats | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const loginSectionRef = useRef<HTMLDivElement>(null);
 
   // Arranca en `true` tanto en el servidor como en el primer render del
   // cliente (sessionStorage no existe en el servidor) para que hidraten
@@ -194,6 +197,31 @@ export default function Lobby() {
     setBalance(null);
   };
 
+  // Ir al login real: cierra el modal de intercepcion (si estaba abierto) y
+  // lleva al invitado hasta la tarjeta de "usuarios de prueba", el unico
+  // mecanismo de autenticacion que existe de verdad en este demo.
+  const goToLogin = useCallback(() => {
+    setAuthModalOpen(false);
+    loginSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  // Modo invitado: puede elegir juego y apuesta libremente, pero "Buscar
+  // rival ahora" es donde de verdad hace falta sesion — sin cuenta no hay
+  // a quien cobrarle ni a quien pagarle el pozo.
+  const handleSearchClick = (): void => {
+    if (!token) {
+      setAuthModalOpen(true);
+      return;
+    }
+    router.push(
+      game === "mines"
+        ? `/mines?stake=${stake}&size=${size}`
+        : game === "blackjack"
+          ? `/blackjack?stake=${stake}`
+          : `/play?stake=${stake}`,
+    );
+  };
+
   const trendingGame = (() => {
     if (!activity) return null;
     const entries = (Object.keys(GAME_META) as Array<keyof typeof GAME_META>).map((key) => ({
@@ -238,6 +266,7 @@ export default function Lobby() {
             }}
             onOpenHistory={() => setHistoryOpen(true)}
             onLogout={logout}
+            onRequestAuth={goToLogin}
           />
           <LiveTicker apiBase={GAME_SERVER_HTTP} />
         </div>
@@ -259,8 +288,93 @@ export default function Lobby() {
           </div>
         )}
 
-        {!token ? (
+        <p className="section-label">Elegir juego</p>
+        <div className="game-grid">
+          {(Object.keys(GAME_META) as Array<keyof typeof GAME_META>).map((key) => {
+            const meta = GAME_META[key];
+            const activeMatches = activity?.byGame[key]?.active ?? 0;
+            return (
+              <GameCard
+                key={key}
+                title={meta.title}
+                subtitle={meta.subtitle}
+                icon={meta.icon}
+                accent={meta.accent}
+                accentGlow={meta.accentGlow}
+                active={game === key}
+                trending={trendingGame === key}
+                liveCount={activity ? activeMatches * 2 : null}
+                onSelect={() => setGame(key)}
+              />
+            );
+          })}
+        </div>
+
+        {game === "mines" && (
           <div className="card">
+            <h2>Tamaño del tablero</h2>
+            <div className="btn-row">
+              {MINES_SIZES.map((option) => {
+                const playing = activity?.minesByBoard[option] ?? 0;
+                return (
+                  <button
+                    key={option}
+                    className={size === option ? "btn" : "btn btn-ghost"}
+                    onClick={() => setSize(option)}
+                  >
+                    {option}×{option} · {minesFor(option)} minas
+                    {activity ? ` · ${playing} jugando` : ""}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <p className="section-label">Elegir apuesta</p>
+        <BetChips
+          tiers={STAKE_TIERS}
+          selected={stake}
+          onSelect={setStake}
+          rakeBps={activity?.rakeBps ?? 500}
+          disabledBelow={balance?.available}
+          onlineByStake={
+            game === "mines" ? activity?.minesByBoardStake[size] : activity?.byStake[game]
+          }
+        />
+
+        <div className="cta-wrap">
+          <button
+            className="cta-button"
+            disabled={!!token && !canAffordStake}
+            onClick={handleSearchClick}
+          >
+            <Swords size={20} strokeWidth={2.4} aria-hidden />
+            ¡Buscar rival ahora!
+          </button>
+          <span className="cta-wait">
+            <Clock3 size={13} strokeWidth={2.2} aria-hidden />
+            Tiempo promedio de espera: ~3 segundos
+          </span>
+          {token && !canAffordStake && (
+            <p className="note" style={{ color: "var(--danger)" }}>
+              Saldo insuficiente para esta apuesta.
+            </p>
+          )}
+        </div>
+
+        <p className="note" style={{ marginTop: "1.5rem" }}>
+          {game === "mines"
+            ? `A ciegas y por turnos: ${MINES_LIVES} vidas, una casilla por turno y ${MINES_TURN_SECONDS} segundos para elegir. Ninguna casilla da pistas de sus vecinas. Cada mina te cuesta una vida; te quedas sin vidas y pierdes. El tablero se fija antes de jugar y puedes verificarlo al terminar.`
+            : game === "blackjack"
+              ? `${BLACKJACK_LIVES} vidas por partida. Blackjack natural gana la ronda en el acto; si los dos se plantan, se revelan las cartas ocultas y el puntaje menor pierde 1 vida. Empate exacto no cuesta nada.`
+              : `Primero en llegar a ${GOALS_TO_WIN} goles. La física corre entera en el servidor.`}
+          {" "}Comisión de la casa: 5%. Si te desconectas tienes 15 segundos para volver antes
+          de perder por abandono.
+        </p>
+
+        {!token && (
+          <div className="card" ref={loginSectionRef}>
             <h2>Entrar · usuarios de prueba</h2>
             <div className="btn-row">
               <button className="btn" onClick={() => void login("ana")} disabled={busy}>
@@ -274,104 +388,16 @@ export default function Lobby() {
               Abre las dos sesiones en pestañas separadas para jugar una partida completa.
             </p>
           </div>
-        ) : (
-          <>
-            <p className="section-label">Elegir juego</p>
-            <div className="game-grid">
-              {(Object.keys(GAME_META) as Array<keyof typeof GAME_META>).map((key) => {
-                const meta = GAME_META[key];
-                const activeMatches = activity?.byGame[key]?.active ?? 0;
-                return (
-                  <GameCard
-                    key={key}
-                    title={meta.title}
-                    subtitle={meta.subtitle}
-                    icon={meta.icon}
-                    accent={meta.accent}
-                    accentGlow={meta.accentGlow}
-                    active={game === key}
-                    trending={trendingGame === key}
-                    liveCount={activity ? activeMatches * 2 : null}
-                    onSelect={() => setGame(key)}
-                  />
-                );
-              })}
-            </div>
-
-            {game === "mines" && (
-              <div className="card">
-                <h2>Tamaño del tablero</h2>
-                <div className="btn-row">
-                  {MINES_SIZES.map((option) => {
-                    const playing = activity?.minesByBoard[option] ?? 0;
-                    return (
-                      <button
-                        key={option}
-                        className={size === option ? "btn" : "btn btn-ghost"}
-                        onClick={() => setSize(option)}
-                      >
-                        {option}×{option} · {minesFor(option)} minas
-                        {activity ? ` · ${playing} jugando` : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <p className="section-label">Elegir apuesta</p>
-            <BetChips
-              tiers={STAKE_TIERS}
-              selected={stake}
-              onSelect={setStake}
-              rakeBps={activity?.rakeBps ?? 500}
-              disabledBelow={balance?.available}
-              onlineByStake={
-                game === "mines" ? activity?.minesByBoardStake[size] : activity?.byStake[game]
-              }
-            />
-
-            <div className="cta-wrap">
-              <button
-                className="cta-button"
-                disabled={!canAffordStake}
-                onClick={() =>
-                  router.push(
-                    game === "mines"
-                      ? `/mines?stake=${stake}&size=${size}`
-                      : game === "blackjack"
-                        ? `/blackjack?stake=${stake}`
-                        : `/play?stake=${stake}`,
-                  )
-                }
-              >
-                <Swords size={20} strokeWidth={2.4} aria-hidden />
-                ¡Buscar rival ahora!
-              </button>
-              <span className="cta-wait">
-                <Clock3 size={13} strokeWidth={2.2} aria-hidden />
-                Tiempo promedio de espera: ~3 segundos
-              </span>
-              {!canAffordStake && (
-                <p className="note" style={{ color: "var(--danger)" }}>
-                  Saldo insuficiente para esta apuesta.
-                </p>
-              )}
-            </div>
-
-            <p className="note" style={{ marginTop: "1.5rem" }}>
-              {game === "mines"
-                ? `A ciegas y por turnos: ${MINES_LIVES} vidas, una casilla por turno y ${MINES_TURN_SECONDS} segundos para elegir. Ninguna casilla da pistas de sus vecinas. Cada mina te cuesta una vida; te quedas sin vidas y pierdes. El tablero se fija antes de jugar y puedes verificarlo al terminar.`
-                : game === "blackjack"
-                  ? `${BLACKJACK_LIVES} vidas por partida. Blackjack natural gana la ronda en el acto; si los dos se plantan, se revelan las cartas ocultas y el puntaje menor pierde 1 vida. Empate exacto no cuesta nada.`
-                  : `Primero en llegar a ${GOALS_TO_WIN} goles. La física corre entera en el servidor.`}
-              {" "}Comisión de la casa: 5%. Si te desconectas tienes 15 segundos para volver antes
-              de perder por abandono.
-            </p>
-          </>
         )}
         </main>
       </div>
+
+      <AuthInterceptModal
+        open={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onCreateAccount={goToLogin}
+        onLogin={goToLogin}
+      />
 
       {token && (
         <>
