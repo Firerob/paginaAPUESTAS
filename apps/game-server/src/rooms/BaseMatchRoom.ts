@@ -17,7 +17,7 @@ import {
   recordEvent,
   type MatchRecord,
 } from "../services/match.service";
-import { escrowMatch, settleMatch, voidMatch, WalletError } from "../services/wallet.service";
+import { escrowMatch, getBalance, settleMatch, voidMatch, WalletError } from "../services/wallet.service";
 
 const HEARTBEAT_MS = 10_000;
 
@@ -363,6 +363,29 @@ export abstract class BaseMatchRoom {
       // liquidacion es un incidente; pagar dos veces es un agujero.
       console.error(`[room ${this.id}] FALLO LA LIQUIDACION`, error);
       await this.record("settlement_failed", { error: String(error) });
+
+      // Sin este aviso, cada jugador se queda mirando la pantalla de
+      // revelado hasta que `dispose` tumbe su socket 5s despues sin
+      // explicacion, y de ahi en mas ve "la partida ya termino" al
+      // reconectar — nunca un resultado. `payout: null` es el mismo camino
+      // que ya usa el cliente para una anulacion (ver BlackjackPanel): no se
+      // afirma ganador ni se muestra saldo con la apuesta perdida, porque
+      // el sweeper todavia va a reembolsar esta partida completa.
+      for (const player of this.players) {
+        const balanceAfter = await getBalance(player.userId)
+          .then((b) => b.available)
+          .catch(() => 0);
+        player.socket?.emit(ServerMessage.MATCH_RESULT, {
+          matchId: this.match.id,
+          winnerUserId: null,
+          youWon: false,
+          endReason: reason,
+          scores,
+          payout: null,
+          rake: null,
+          balanceAfter,
+        } satisfies MatchResultPayload);
+      }
     }
 
     this.dispose(5000);

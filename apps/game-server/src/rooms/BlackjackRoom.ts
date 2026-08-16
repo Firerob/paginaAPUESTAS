@@ -442,6 +442,12 @@ export class BlackjackRoom extends BaseMatchRoom {
 
   private finishByLives(winnerSeat: Seat): void {
     this.phase = "finished";
+    // Sin esto el cliente se queda leyendo el ultimo STATE que le llego
+    // (phase="showdown"), mostrando "REVELANDO CARTAS..." indefinidamente
+    // hasta que llegue MATCH_RESULT — que puede tardar (o, si la liquidacion
+    // fallara, no llegar nunca por este camino). Un broadcast mas resuelve
+    // el HUD de inmediato, antes de que la liquidacion siquiera empiece.
+    this.broadcastState();
     this.publishFairness();
     void this.record("out_of_lives", { winnerSeat });
 

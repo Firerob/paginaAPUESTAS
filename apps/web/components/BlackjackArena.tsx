@@ -9,6 +9,7 @@ import {
   BLACKJACK_ROULETTE_FADE_MS,
   BLACKJACK_ROULETTE_RESULT_MS,
   BLACKJACK_ROULETTE_SPIN_MS,
+  BLACKJACK_SHOWDOWN_MS,
   BLACKJACK_TURN_SECONDS,
   BlackjackClientMessage,
   BlackjackServerMessage,
@@ -257,6 +258,33 @@ export default function BlackjackArena({ token, stake, onRematch }: Props) {
   }, [token, stake, showBanner, shake, markBrokenHeart]);
 
   // -------------------------------------------------------------------------
+  // Red de seguridad: revelado colgado (MATCH_RESULT que nunca llego)
+  // -------------------------------------------------------------------------
+  // El servidor ya sincroniza phase="finished" apenas alguien se queda sin
+  // vidas (ver BlackjackRoom.finishByLives), asi que en el camino normal
+  // este timer nunca llega a disparar: el HUD sale de "showdown" antes.
+  // Sigue existiendo por si la liquidacion falla del lado del servidor (o el
+  // evento se pierde en la red) y el jugador queda mirando "REVELANDO
+  // CARTAS..." sin ningun mensaje — eso es peor que un error explicito con
+  // boton para volver.
+  useEffect(() => {
+    if (state?.phase !== "showdown") return;
+
+    const timer = setTimeout(() => {
+      setStatus((current) =>
+        current.kind === "playing"
+          ? {
+              kind: "error",
+              message: "No pudimos confirmar el resultado. Tu saldo está protegido — revísalo en el lobby.",
+            }
+          : current,
+      );
+    }, BLACKJACK_SHOWDOWN_MS + 4000);
+
+    return () => clearTimeout(timer);
+  }, [state?.phase, state?.round]);
+
+  // -------------------------------------------------------------------------
   // Reloj del turno
   // -------------------------------------------------------------------------
   useEffect(() => {
@@ -298,6 +326,7 @@ export default function BlackjackArena({ token, stake, onRematch }: Props) {
   const turnPct = Math.max(0, Math.min(100, (turnLeft / (BLACKJACK_TURN_SECONDS * 1000)) * 100));
   const urgent = myTurn && seconds <= 3;
   const showdownActive = state?.phase === "showdown";
+  const roundOver = showdownActive || state?.phase === "finished";
 
   return (
     <div className={`game-shell bj-arena ${shaking ? "shake" : ""}`} onPointerDown={() => gameAudio.unlock()}>
@@ -369,7 +398,7 @@ export default function BlackjackArena({ token, stake, onRematch }: Props) {
                   : `TURNO DE ${(opponentName || "TU RIVAL").toUpperCase()}`}
           </div>
 
-          {!showdownActive && (
+          {!roundOver && (
             <div className={`turn-clock ${urgent ? "turn-clock-urgent" : ""}`}>
               <span className="turn-seconds">{seconds}</span>
               <div className="turn-bar" aria-hidden>
