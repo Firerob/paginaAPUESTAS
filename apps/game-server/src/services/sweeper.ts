@@ -11,11 +11,22 @@ import { voidMatch } from "./wallet.service";
  * Que el jugador pierda una partida por un crash NUESTRO seria inaceptable,
  * asi que la resolucion es siempre devolucion, nunca derrota.
  *
- * El umbral debe ser holgado respecto de la ventana de reconexion: una partida
- * viva late cada pocos segundos, y no queremos anular una partida real.
+ * El umbral debe ser holgado respecto del latido normal (`HEARTBEAT_MS` en
+ * BaseMatchRoom, 10s, y cada jugada tambien lo refresca via `updateScore`):
+ * no queremos anular una partida real por un socket lento. Pero OJO — esto
+ * NO es la ventana de reconexion de un jugador (`RECONNECT_WINDOW_S`, 15s):
+ * el latido sigue avanzando mientras el PROCESO este vivo, sin importar si
+ * un jugador puntual se cayo. Este umbral mide si el proceso entero murio.
+ *
+ * Mientras una partida sigue "stale" sin barrer, `MatchManager.hasOpenMatch`
+ * bloquea a esos dos usuarios de arrancar cualquier partida nueva (el indice
+ * parcial de `match_players` no distingue "partida viva" de "huerfana"). Por
+ * eso el umbral se mantiene lo mas chico posible sin arriesgar falsos
+ * positivos: cada segundo de mas aca es un jugador real bloqueado de jugar
+ * por un crash o un redeploy que no fue culpa suya.
  */
-const STALE_AFTER_SECONDS = 120;
-const SWEEP_INTERVAL_MS = 30_000;
+const STALE_AFTER_SECONDS = 45;
+const SWEEP_INTERVAL_MS = 10_000;
 
 let timer: NodeJS.Timeout | null = null;
 
