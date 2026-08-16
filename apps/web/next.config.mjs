@@ -35,6 +35,22 @@ const nextConfig = {
   images: { unoptimized: true },
   basePath: onGithubPages ? repoBasePath : undefined,
   assetPrefix: onGithubPages ? `${repoBasePath}/` : undefined,
+  // Solo en Render (o cualquier host con `next start` de verdad): reenvia
+  // /api/* server-a-server al game-server real, asi el navegador nunca ve
+  // un origen distinto para esas llamadas (sin preflight de CORS de por
+  // medio). GitHub Pages no tiene servidor para correr esto — de hecho Next
+  // ni deja definir `rewrites` junto con `output: "export"`, por eso va
+  // condicionado — asi que ahi el codigo del cliente sigue llamando la URL
+  // absoluta de GAME_SERVER_HTTP directo, que es lo unico que puede
+  // funcionar sin servidor. Esto es una capa extra para Render, no un
+  // reemplazo de esa URL absoluta.
+  rewrites: onGithubPages
+    ? undefined
+    : async () => {
+        const gameServerUrl =
+          process.env.NEXT_PUBLIC_GAME_SERVER_HTTP || "http://localhost:2567";
+        return [{ source: "/api/:path*", destination: `${gameServerUrl}/api/:path*` }];
+      },
   env: {
     // Se inyecta explicitamente porque las NEXT_PUBLIC_* se inlinean en el
     // bundle del cliente durante el build, antes de que corra el codigo de
