@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { animate, motion, useReducedMotion } from "framer-motion";
 import { Bomb, Gamepad2, Spade } from "lucide-react";
 import { formatCOP } from "@ah/shared";
+import { gameAudio } from "@/lib/audio";
 
 /**
  * Duracion total de la intro (ms): Fase A 0-1.2s (golpe inicial) · Fase B
@@ -58,6 +59,8 @@ interface Particle {
   color: string;
   size: number;
   life: number;
+  /** Profundidad simulada: mas cerca de la camara = mas grande y mas rapida. */
+  z: number;
 }
 
 const PARTICLE_COLORS = ["#f59e0b", "#fde68a", "#ffd700", "#06b6d4"];
@@ -66,8 +69,9 @@ const GRAVITY = 0.34;
 /**
  * Lluvia de fichas doradas y billetes en Canvas 2D: mucho mas barato que
  * animar decenas de nodos DOM por frame. Arranca con una ráfaga desde el
- * centro al montar y sigue goteando hasta ~2.6s; cada particula se apaga
- * sola (`life`), asi que no hace falta limpiar nada a mano al final.
+ * centro al montar y sigue goteando solo durante la Fase A (~1.3s) para no
+ * competir con el contador de la Fase B; cada particula se apaga sola
+ * (`life`), asi que no hace falta limpiar nada a mano al final.
  */
 function useJackpotRain(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolean) {
   useEffect(() => {
@@ -92,8 +96,12 @@ function useJackpotRain(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolea
       const cx = window.innerWidth / 2;
       const cy = window.innerHeight / 2;
       for (let i = 0; i < n; i++) {
+        // Profundidad simulada: particulas "cercanas" (z alto) salen mas
+        // rapido y grandes, las "lejanas" (z bajo) mas lentas y chicas — el
+        // estallido se siente radial en 3D, no un circulo plano de fichas.
+        const z = 0.45 + Math.random() * 1.35;
         const angle = Math.random() * Math.PI * 2;
-        const speed = 4.5 + Math.random() * 10;
+        const speed = (4.5 + Math.random() * 10) * (0.55 + z * 0.5);
         particles.push({
           x: cx,
           y: cy,
@@ -103,15 +111,20 @@ function useJackpotRain(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolea
           vrot: (Math.random() - 0.5) * 0.3,
           kind: Math.random() < 0.6 ? "chip" : "bill",
           color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
-          size: 11 + Math.random() * 11,
+          size: (11 + Math.random() * 11) * z,
           life: 1,
+          z,
         });
       }
     };
 
-    spawnBurst(80);
-    const spawnLoop = setInterval(() => spawnBurst(16), 220);
-    const stopSpawn = setTimeout(() => clearInterval(spawnLoop), 2600);
+    // El estallido pasa en la Fase A: se corta el goteo apenas termina
+    // (~1.3s) en vez de seguir hasta entrada la Fase B. Asi el contador no
+    // compite por atencion (ni por CPU) con fichas nuevas cayendo — cada
+    // fase tiene su propio momento en vez de que todo se sienta amontonado.
+    spawnBurst(90);
+    const spawnLoop = setInterval(() => spawnBurst(16), 200);
+    const stopSpawn = setTimeout(() => clearInterval(spawnLoop), 1300);
 
     let raf = 0;
     const groundY = () => window.innerHeight * 0.94;
@@ -142,6 +155,9 @@ function useJackpotRain(canvasRef: RefObject<HTMLCanvasElement>, enabled: boolea
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rot);
         ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+        // Nada de `ctx.shadowBlur`: con decenas de particulas por frame es
+        // uno de los costos mas altos que tiene Canvas2D — el brillo lo pone
+        // el glow ambiental de CSS de atras, no cada ficha por su cuenta.
         if (p.kind === "chip") {
           ctx.beginPath();
           ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
@@ -208,6 +224,34 @@ export function HeroIntro({ onFinish }: { onFinish: () => void }) {
     };
   }, [reduceMotion, onFinish]);
 
+  useEffect(() => {
+    // El navegador bloquea el audio hasta el primer gesto real: no hay forma
+    // de garantizar que suene desde el frame 0. Si el usuario interactua en
+    // algun momento de la intro (click, toque, tecla — incluso SALTAR o ESC
+    // cuentan), se desbloquea `gameAudio` ahi mismo y se programa la cascada
+    // solo para el tiempo que le queda a la intro, no desde el principio.
+    if (reduceMotion) return;
+    const startedAt = performance.now();
+    let started = false;
+
+    const onFirstGesture = () => {
+      if (started) return;
+      started = true;
+      gameAudio.unlock();
+      const remaining = INTRO_MS - (performance.now() - startedAt);
+      gameAudio.playCoinCascade(Math.max(300, remaining));
+      window.removeEventListener("pointerdown", onFirstGesture);
+      window.removeEventListener("keydown", onFirstGesture);
+    };
+
+    window.addEventListener("pointerdown", onFirstGesture);
+    window.addEventListener("keydown", onFirstGesture);
+    return () => {
+      window.removeEventListener("pointerdown", onFirstGesture);
+      window.removeEventListener("keydown", onFirstGesture);
+    };
+  }, [reduceMotion]);
+
   if (reduceMotion) return null;
 
   return (
@@ -222,6 +266,12 @@ export function HeroIntro({ onFinish }: { onFinish: () => void }) {
       </button>
 
       <div className="hero-intro-shake">
+        <div className="hero-intro-ambient" aria-hidden>
+          <div className="hero-intro-ambient-glow" />
+          <div className="hero-intro-ambient-grid" />
+          <div className="hero-intro-ambient-rays" />
+        </div>
+
         <canvas ref={canvasRef} className="hero-intro-canvas" aria-hidden />
         <div className="hero-intro-flash" aria-hidden />
         <div className="hero-intro-strobe" aria-hidden />

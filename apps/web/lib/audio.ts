@@ -125,6 +125,33 @@ class GameAudio {
     }
   }
 
+  /**
+   * Cascada de monedas: una rafaga de tintineos metalicos de frecuencia alta
+   * (1200-4500Hz) repartidos al azar en toda la ventana de `durationMs`. Para
+   * el momento "jackpot" de HeroIntro — no tiene forma fija como los demas
+   * sonidos, por eso vive aparte del switch de `play()`.
+   *
+   * Igual que el resto de la clase, no suena si `unlock()` todavia no corrio
+   * dentro de un gesto real del usuario: sin contexto, es un no-op silencioso.
+   */
+  playCoinCascade(durationMs: number): void {
+    if (!this.ctx || !this.master || this.muted) return;
+    const now = this.ctx.currentTime;
+    const duration = Math.max(0.05, durationMs / 1000);
+    const count = Math.round(duration * 22); // ~22 tintineos por segundo
+    for (let i = 0; i < count; i++) {
+      const at = now + Math.random() * duration;
+      const freq = 1200 + Math.random() * 3300;
+      this.coinTink(at, freq, 0.16 + Math.random() * 0.1);
+    }
+  }
+
+  /** Un tintineo metalico: dos tonos breves y desafinados, como una moneda cayendo. */
+  private coinTink(at: number, freq: number, gain: number): void {
+    this.blip(at, freq, 0.05, "triangle", gain);
+    this.blip(at + 0.012, freq * 1.6, 0.035, "sine", gain * 0.55);
+  }
+
   /** Un tono con envolvente exponencial. */
   private blip(
     at: number,
