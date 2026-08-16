@@ -15,15 +15,36 @@ async function main(): Promise<void> {
   // apuestas sin poder registrarlas.
   await pool.query("SELECT 1");
 
+  // Se comparte entre Express y Socket.IO abajo: los dos deben aceptar
+  // exactamente los mismos origenes, o el fetch pasa pero el socket no (o
+  // viceversa) y el sintoma es confuso a medias.
+  //
+  // El origen SIGUE siendo una lista fija (`env.corsOrigin`), no una funcion
+  // que aprueba cualquier cosa: un callback que hace `callback(null, true)`
+  // en el caso "no permitido" no arregla un 404 (ese es un problema de
+  // enrutamiento, no de CORS) y de paso apaga el chequeo de origen — con
+  // `credentials: true` eso es peor, no una red de seguridad para pruebas.
+  const corsOptions: cors.CorsOptions = {
+    origin: env.corsOrigin,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  };
+
   const app = express();
-  app.use(cors({ origin: env.corsOrigin, credentials: true }));
+  app.use(cors(corsOptions));
+  // La libreria `cors` ya responde el preflight solo con el middleware de
+  // arriba; esto es un manejador explicito de refuerzo para *cualquier*
+  // ruta, util si algo (un proxy, un 404 antes de tiempo) se lo llegara a
+  // comer antes de que el middleware normal corra.
+  app.options("*", cors(corsOptions));
   app.use(express.json({ limit: "16kb" }));
   app.use(routes);
 
   const httpServer = http.createServer(app);
 
   const io = new IOServer(httpServer, {
-    cors: { origin: env.corsOrigin, credentials: true },
+    cors: corsOptions,
     // El unico mensaje legitimo del cliente es {x, y}: cualquier payload
     // grande es basura o un intento de agotar memoria.
     maxHttpBufferSize: 1024,

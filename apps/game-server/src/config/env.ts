@@ -38,12 +38,18 @@ export const env = {
   // presente manda sobre `GAME_SERVER_PORT`, que sigue siendo el default
   // para desarrollo local.
   port: int("PORT", int("GAME_SERVER_PORT", 2567)),
-  // Admite varios origenes separados por coma (ej. el lobby local +
-  // GitHub Pages a la vez) para no tener que elegir uno solo en produccion.
-  corsOrigin: (process.env.GAME_SERVER_ORIGIN ?? "http://localhost:3000")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  // Admite varios origenes a la vez (ej. el lobby en Render + el mismo
+  // lobby servido estatico en GitHub Pages), de dos fuentes que se combinan:
+  // GAME_SERVER_ORIGIN (lista separada por coma, la fuente principal) y
+  // CLIENT_URL (un origen suelto, por si el hosting del front ya inyecta esa
+  // variable especifica de por si). Duplicados se descartan.
+  corsOrigin: Array.from(
+    new Set(
+      [...(process.env.GAME_SERVER_ORIGIN ?? "http://localhost:3000").split(","), process.env.CLIENT_URL]
+        .map((origin) => origin?.trim())
+        .filter((origin): origin is string => Boolean(origin)),
+    ),
+  ),
 
   // Postgres administrado (Render, RDS, etc.) exige TLS; el Postgres local
   // de docker-compose no lo tiene. Nunca se activa solo: hay que pedirlo
