@@ -35,10 +35,10 @@ services:
         value: airhockey-auth
       - key: JWT_AUDIENCE
         value: airhockey-game
-      # Cambialo por tu dominio real de GitHub Pages
-      # (https://<usuario>.github.io) apenas lo tengas.
+      # Uno o mas origenes separados por coma: el lobby en Render y el
+      # mismo lobby servido estatico en GitHub Pages. Ajustalo si cambian.
       - key: GAME_SERVER_ORIGIN
-        value: https://firerob.github.io
+        value: https://paginaapuestas.onrender.com,https://firerob.github.io
       - key: RAKE_BPS
         value: "500"
       - key: HOUSE_USER_ID
