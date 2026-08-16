@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { AnimatePresence } from "framer-motion";
 import { Bomb, Clock3, Gamepad2, Spade, Swords } from "lucide-react";
@@ -101,6 +102,7 @@ export default function Lobby() {
   const [activity, setActivity] = useState<ActivityStats | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const loginSectionRef = useRef<HTMLDivElement>(null);
 
   // Arranca en `true` tanto en el servidor como en el primer render del
@@ -391,11 +393,35 @@ export default function Lobby() {
         {!token && (
           <div className="card" ref={loginSectionRef}>
             <h2>Entrar · usuarios de prueba</h2>
+
+            <label className="terms-check">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+              />
+              <span>
+                He leído, entiendo y acepto los{" "}
+                <Link href="/terminos" target="_blank" rel="noopener noreferrer">
+                  Términos y Condiciones de Uso
+                </Link>{" "}
+                y asumo el riesgo de pérdida financiera.
+              </span>
+            </label>
+
             <div className="btn-row">
-              <button className="btn" onClick={() => void login("ana")} disabled={busy}>
+              <button
+                className="btn"
+                onClick={() => void login("ana")}
+                disabled={busy || !acceptedTerms}
+              >
                 Entrar como Ana
               </button>
-              <button className="btn btn-ghost" onClick={() => void login("beto")} disabled={busy}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => void login("beto")}
+                disabled={busy || !acceptedTerms}
+              >
                 Entrar como Beto
               </button>
             </div>
@@ -405,6 +431,13 @@ export default function Lobby() {
           </div>
         )}
         </main>
+
+        <footer className="site-footer">
+          <p className="note">
+            Debes ser mayor de edad para usar esta plataforma. Juega con responsabilidad. ·{" "}
+            <Link href="/terminos">Términos y Condiciones</Link>
+          </p>
+        </footer>
       </div>
 
       <AuthInterceptModal

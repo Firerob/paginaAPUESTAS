@@ -3452,3 +3452,127 @@ body::before {
     max-width: 100%;
   }
 }
+
+/* ------------------------------ legal / ToS ------------------------------ */
+
+.legal-page {
+  position: relative;
+  z-index: 10;
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.legal-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--cyan);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 1.5rem;
+}
+
+.legal-back:hover {
+  text-decoration: underline;
+}
+
+.legal-back-bottom {
+  margin-top: 2.5rem;
+  margin-bottom: 0;
+}
+
+.legal-title {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 800;
+  margin: 0 0 0.4rem;
+}
+
+.legal-updated {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin: 0 0 1.8rem;
+}
+
+.legal-page p {
+  color: var(--text);
+  font-size: 0.92rem;
+  margin: 0 0 0.9rem;
+}
+
+.legal-page h2 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--cyan);
+  margin: 2rem 0 0.8rem;
+}
+
+.legal-list {
+  margin: 0 0 0.9rem;
+  padding-left: 1.3rem;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.legal-list li {
+  margin-bottom: 0.4rem;
+}
+
+/* ------------------------------ pie de pagina ----------------------------- */
+
+.site-footer {
+  position: relative;
+  z-index: 10;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2.5rem;
+  text-align: center;
+}
+
+.site-footer .note {
+  margin: 0;
+}
+
+.site-footer a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ----------------------------- casilla de terminos ------------------------ */
+
+.terms-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.terms-check input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0.15rem;
+  accent-color: var(--self);
+  cursor: pointer;
+}
+
+.terms-check span {
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.terms-check a {
+  color: var(--cyan);
+  text-decoration: underline;
+}
