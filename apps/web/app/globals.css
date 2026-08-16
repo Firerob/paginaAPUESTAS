@@ -2174,8 +2174,8 @@ body::before {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 3rem;
-  height: 3rem;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: 14px;
   background: var(--accent-glow);
   color: var(--accent);
@@ -2186,10 +2186,88 @@ body::before {
   position: relative;
   z-index: 1;
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   font-weight: 800;
   letter-spacing: 0.02em;
   margin: 0.8rem 0 0.2rem;
+}
+
+/* Boton de 3 puntos: reglas del juego. */
+.game-card-info-btn {
+  position: absolute;
+  z-index: 2;
+  top: 0.9rem;
+  right: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(6, 10, 20, 0.55);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.game-card-info-btn:hover,
+.game-card-info-btn:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(6, 10, 20, 0.8);
+}
+
+/* Panel de reglas: ocupa la tarjeta entera, no un tooltip flotante que se
+   saldria del `overflow: hidden` de `.game-card`. */
+.game-card-info-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.6rem;
+  background: rgba(4, 7, 15, 0.94);
+  backdrop-filter: blur(6px);
+  cursor: default;
+}
+
+.game-card-info-close {
+  position: absolute;
+  top: 0.9rem;
+  right: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.game-card-info-close:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.game-card-info-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+
+.game-card-info-text {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 0;
 }
 
 .game-card-sub {

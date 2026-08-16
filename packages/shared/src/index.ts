@@ -6,3 +6,4 @@ export * from "./simulation";
 export * from "./netcode";
 export * from "./mines";
 export * from "./blackjack";
+export * from "./chat";

@@ -6,6 +6,7 @@ import { env } from "./config/env";
 import { routes } from "./http/routes";
 import { AuthError, verifyToken } from "./auth/jwt";
 import { MatchManager } from "./rooms/MatchManager";
+import { registerChatNamespace } from "./chat/chatNamespace";
 import { startSweeper, stopSweeper } from "./services/sweeper";
 import { markConnected, markDisconnected } from "./services/presence";
 import { closePool, pool } from "./db/pool";
@@ -85,6 +86,7 @@ async function main(): Promise<void> {
   });
 
   const matchmaking = new MatchManager(io);
+  registerChatNamespace(io);
 
   io.on("connection", (socket) => {
     markConnected();

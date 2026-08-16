@@ -48,6 +48,7 @@ const GAME_META = {
   air_hockey: {
     title: "Air Hockey",
     subtitle: `Reflejos en tiempo real · a ${GOALS_TO_WIN} goles`,
+    rules: "Demuestra tus reflejos marcando 7 goles antes que tu rival en tiempo real.",
     icon: Gamepad2,
     accent: "#22e8ff",
     accentGlow: "rgba(34, 232, 255, 0.35)",
@@ -55,6 +56,7 @@ const GAME_META = {
   mines: {
     title: "Minas 1v1",
     subtitle: `Azar puro, por turnos · ${MINES_LIVES} vidas`,
+    rules: "Juego de estrategia por turnos y azar. Evita destapar las minas para mantener tus 3 vidas.",
     icon: Bomb,
     accent: "#b967ff",
     accentGlow: "rgba(185, 103, 255, 0.35)",
@@ -62,6 +64,8 @@ const GAME_META = {
   blackjack: {
     title: "Blackjack Arena",
     subtitle: `Manos 1v1 con revelación final · ${BLACKJACK_LIVES} vidas`,
+    rules:
+      "Compite mano a mano para acercarte a 21 sin pasarte. El jugador con más vidas gana la partida.",
     icon: Spade,
     accent: "#e11d48",
     accentGlow: "rgba(225, 29, 72, 0.35)",
@@ -163,7 +167,9 @@ export default function Lobby() {
       }
     };
     void load();
-    const id = setInterval(load, 10_000);
+    // 30s: suficientemente seguido para que el lobby se sienta vivo, sin
+    // convertir cada pestaña abierta en una consulta constante a la base.
+    const id = setInterval(load, 30_000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -253,6 +259,8 @@ export default function Lobby() {
       <FallingChips side="left" leftReserved={chatOpen ? 320 : 0} />
       <LiveChatSidebar
         userName={token ? name : null}
+        token={token}
+        apiBase={GAME_SERVER_HTTP}
         onlineCount={activity?.online}
         open={chatOpen}
         onOpenChange={setChatOpen}
@@ -304,6 +312,7 @@ export default function Lobby() {
                 key={key}
                 title={meta.title}
                 subtitle={meta.subtitle}
+                rules={meta.rules}
                 icon={meta.icon}
                 accent={meta.accent}
                 accentGlow={meta.accentGlow}

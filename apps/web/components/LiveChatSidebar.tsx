@@ -1,25 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { io, type Socket } from "socket.io-client";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageSquare, Send, X } from "lucide-react";
-
-type Badge = "PRO" | "VIP" | "WHALE";
-
-interface ChatMessage {
-  id: string;
-  name: string;
-  badge?: Badge;
-  text: string;
-  at: number;
-  self?: boolean;
-}
-
-const BADGE_STYLE: Record<Badge, string> = {
-  PRO: "border-cyan-400/50 bg-cyan-400/10 text-cyan-300",
-  VIP: "border-purple-400/50 bg-purple-400/10 text-purple-300",
-  WHALE: "border-amber-400/50 bg-amber-400/10 text-amber-300",
-};
+import {
+  CHAT_MAX_LEN,
+  ChatClientMessage,
+  ChatServerMessage,
+  type ChatMessagePayload,
+  type ChatRejectedPayload,
+} from "@ah/shared";
 
 const AVATAR_GRADIENTS = [
   "from-cyan-400 to-blue-600",
@@ -47,44 +38,74 @@ function timeAgo(at: number): string {
   return `hace ${Math.floor(m / 60)}h`;
 }
 
-/**
- * Seed de demostracion visual: esta sala NO esta conectada a un backend de
- * chat en tiempo real todavia. Los mensajes de otros usuarios de aqui abajo
- * son estaticos, solo para mostrar el look del feed; lo unico "en vivo" es
- * lo que el propio usuario escribe (se agrega al estado local). Conectar un
- * canal real (Socket.IO, ya usado en el resto de la app) es trabajo aparte.
- * El componente entero se monta solo en cliente (ver el dynamic() en
- * page.tsx) porque estos timestamps se calculan contra Date.now(): si esto
- * se renderizara en el servidor, el reloj del server y el del navegador casi
- * nunca coincidirian y React tiraria un error de hidratacion.
- */
-const SEED_MESSAGES: ChatMessage[] = [
-  { id: "seed-1", name: "Carlos23", badge: "PRO", text: "GG esa ronda de Mines estuvo brava 🔥", at: Date.now() - 9 * 60_000 },
-  { id: "seed-2", name: "Ana_Gomez", badge: "VIP", text: "¿alguien para Air Hockey a 10k?", at: Date.now() - 6 * 60_000 },
-  { id: "seed-3", name: "ElPatron", badge: "WHALE", text: "acabo de meter 100k al pozo 💎", at: Date.now() - 3 * 60_000 },
-  { id: "seed-4", name: "Lupe.cr", text: "suerte a todos 🍀", at: Date.now() - 60_000 },
-];
-
-const MAX_LEN = 120;
+const REJECT_MESSAGE: Record<ChatRejectedPayload["reason"], string> = {
+  not_authenticated: "Inicia sesión para chatear.",
+  empty: "Escribe algo primero.",
+  too_long: `Máximo ${CHAT_MAX_LEN} caracteres.`,
+  rate_limited: "Espera un momento antes de mandar otro mensaje.",
+};
 
 interface LiveChatSidebarProps {
   /** Nombre del usuario autenticado, o null si no hay sesion (input queda deshabilitado). */
   userName: string | null;
-  /** Jugadores conectados ahora mismo, dato real si el padre lo tiene. */
+  /** JWT de la sesion actual. Sin token, el socket se conecta igual pero solo puede leer. */
+  token: string | null;
+  /** Origen del game-server (mismo que el resto de la app usa para HTTP y sockets de partida). */
+  apiBase: string;
+  /** Jugadores conectados ahora mismo, dato real que ya trae el padre de /api/activity/stats. */
   onlineCount?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 /**
- * Chat lateral estilo Duel/Stake: panel flotante e independiente del flujo
- * del documento (`fixed`), nunca empuja el contenido del lobby — el lobby
- * es quien le deja espacio con `lg:pl-80` cuando esta abierto (ver page.tsx).
+ * Chat lateral estilo Duel/Stake, conectado de verdad al namespace `/chat`
+ * del game-server (ver `chatNamespace.ts`): cualquiera que entre a la
+ * pagina se conecta y ve el canal en vivo, con o sin sesion. Solo escribir
+ * exige JWT valido, y eso lo re-valida el servidor en cada mensaje — el
+ * `disabled` del input de aqui abajo es cortesia de UX, no la garantia real.
  */
-export function LiveChatSidebar({ userName, onlineCount, open, onOpenChange }: LiveChatSidebarProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>(SEED_MESSAGES);
+export function LiveChatSidebar({
+  userName,
+  token,
+  apiBase,
+  onlineCount,
+  open,
+  onOpenChange,
+}: LiveChatSidebarProps) {
+  const [messages, setMessages] = useState<ChatMessagePayload[]>([]);
   const [draft, setDraft] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
   const feedRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    const socket = io(`${apiBase}/chat`, {
+      transports: ["websocket"],
+      auth: token ? { token } : {},
+    });
+    socketRef.current = socket;
+
+    socket.on(ChatServerMessage.HISTORY, (history: ChatMessagePayload[]) => setMessages(history));
+    socket.on(ChatServerMessage.MESSAGE_RECEIVED, (message: ChatMessagePayload) =>
+      setMessages((prev) => [...prev.slice(-99), message]),
+    );
+    socket.on(ChatServerMessage.REJECTED, (payload: ChatRejectedPayload) => {
+      setNotice(REJECT_MESSAGE[payload.reason] ?? "No se pudo enviar el mensaje.");
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+    // Reconecta con el token nuevo en login/logout — misma sesion, misma sala.
+  }, [apiBase, token]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), 3000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
@@ -93,10 +114,7 @@ export function LiveChatSidebar({ userName, onlineCount, open, onOpenChange }: L
   const send = (): void => {
     const text = draft.trim();
     if (!text || !userName) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: `self-${Date.now()}`, name: userName, text, at: Date.now(), self: true },
-    ]);
+    socketRef.current?.emit(ChatClientMessage.SEND_MESSAGE, text);
     setDraft("");
   };
 
@@ -122,7 +140,7 @@ export function LiveChatSidebar({ userName, onlineCount, open, onOpenChange }: L
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
                   </span>
-                  {onlineCount ?? 142} online
+                  {onlineCount ?? "…"} online
                 </div>
               </div>
               <button
@@ -136,6 +154,11 @@ export function LiveChatSidebar({ userName, onlineCount, open, onOpenChange }: L
 
             {/* Feed */}
             <div ref={feedRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+              {messages.length === 0 && (
+                <p className="text-center text-[12px] text-slate-500">
+                  Todavía no hay mensajes. ¡Sé el primero!
+                </p>
+              )}
               {messages.map((m) => (
                 <div
                   key={m.id}
@@ -149,18 +172,11 @@ export function LiveChatSidebar({ userName, onlineCount, open, onOpenChange }: L
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="truncate text-[12.5px] font-semibold text-white">{m.name}</span>
-                      {m.badge && (
-                        <span
-                          className={`rounded-full border px-1.5 py-[1px] text-[9px] font-bold tracking-wide ${BADGE_STYLE[m.badge]}`}
-                        >
-                          {m.badge}
-                        </span>
-                      )}
                       <span className="text-[10px] text-slate-500">{timeAgo(m.at)}</span>
                     </div>
                     <p
                       className={`mt-1 break-words text-[13px] leading-snug ${
-                        m.self ? "text-cyan-50" : "text-slate-200"
+                        m.name === userName ? "text-cyan-50" : "text-slate-200"
                       }`}
                     >
                       {m.text}
@@ -178,12 +194,13 @@ export function LiveChatSidebar({ userName, onlineCount, open, onOpenChange }: L
                 send();
               }}
             >
+              {notice && <div className="mb-2 text-[11px] text-amber-300">{notice}</div>}
               <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-white/[0.04] px-3 py-2 focus-within:border-cyan-400/40">
                 <input
                   className="min-w-0 flex-1 bg-transparent text-[13px] text-white placeholder:text-slate-500 focus:outline-none"
                   placeholder={userName ? "Escribe un mensaje…" : "Inicia sesión para chatear"}
                   value={draft}
-                  maxLength={MAX_LEN}
+                  maxLength={CHAT_MAX_LEN}
                   disabled={!userName}
                   onChange={(e) => setDraft(e.target.value)}
                 />
@@ -197,7 +214,7 @@ export function LiveChatSidebar({ userName, onlineCount, open, onOpenChange }: L
                 </button>
               </div>
               <div className="mt-1 text-right text-[10px] text-slate-600">
-                {draft.length}/{MAX_LEN}
+                {draft.length}/{CHAT_MAX_LEN}
               </div>
             </form>
           </motion.aside>
