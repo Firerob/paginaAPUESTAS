@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { AnimatePresence } from "framer-motion";
 import { Bomb, Clock3, Gamepad2, Spade, Swords } from "lucide-react";
 import {
   BLACKJACK_LIVES,
@@ -24,6 +25,7 @@ import { GameCard } from "../components/GameCard";
 import { BetChips } from "../components/BetChips";
 import { AmbientBackground } from "../components/AmbientBackground";
 import { FallingChips } from "../components/FallingChips";
+import { HeroIntro } from "../components/HeroIntro";
 
 // Cliente-solo: el feed trae "hace Xm" calculado desde Date.now() en una
 // constante de modulo. Si esto se renderiza en el servidor, el momento en
@@ -91,6 +93,19 @@ export default function Lobby() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [activity, setActivity] = useState<ActivityStats | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
+
+  // Arranca en `true` tanto en el servidor como en el primer render del
+  // cliente (sessionStorage no existe en el servidor) para que hidraten
+  // igual; el efecto de abajo la baja a `false` de una si ya se vio esta
+  // sesion, apenas monta.
+  const [showIntro, setShowIntro] = useState(true);
+  useEffect(() => {
+    if (sessionStorage.getItem("ah:introSeen")) setShowIntro(false);
+  }, []);
+  const finishIntro = useCallback(() => {
+    sessionStorage.setItem("ah:introSeen", "1");
+    setShowIntro(false);
+  }, []);
 
   // En pantallas angostas el chat de 320px se comeria toda la pantalla:
   // arranca colapsado ahi y abierto en escritorio.
@@ -197,6 +212,8 @@ export default function Lobby() {
 
   return (
     <>
+      <AnimatePresence>{showIntro && <HeroIntro onFinish={finishIntro} />}</AnimatePresence>
+
       <AmbientBackground leftReserved={chatOpen ? 320 : 0} />
       <FallingChips side="right" leftReserved={chatOpen ? 320 : 0} />
       <FallingChips side="left" leftReserved={chatOpen ? 320 : 0} />
