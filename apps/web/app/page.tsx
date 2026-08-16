@@ -39,8 +39,10 @@ const LiveChatSidebar = dynamic(
   { ssr: false },
 );
 
+// `||`, no `??`: ver la nota en next.config.mjs sobre por que un fallback
+// con nullish coalescing no protege contra una variable de CI vacia.
 const GAME_SERVER_HTTP =
-  process.env.NEXT_PUBLIC_GAME_SERVER_HTTP ?? "http://localhost:2567";
+  process.env.NEXT_PUBLIC_GAME_SERVER_HTTP || "http://localhost:2567";
 
 const GAME_META = {
   air_hockey: {

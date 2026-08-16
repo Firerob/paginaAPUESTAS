@@ -1,6 +1,9 @@
 import { io, type Socket } from "socket.io-client";
 
-const SERVER_URL = process.env.NEXT_PUBLIC_GAME_SERVER_HTTP ?? "http://localhost:2567";
+// `||`, no `??`: una variable de CI sin configurar llega como string vacio,
+// no undefined, y con `??` el socket terminaba conectando al propio origen
+// del sitio en vez de al game-server real.
+const SERVER_URL = process.env.NEXT_PUBLIC_GAME_SERVER_HTTP || "http://localhost:2567";
 const RESUME_KEY = "ah:resumeToken";
 
 /**

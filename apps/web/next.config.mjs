@@ -39,8 +39,14 @@ const nextConfig = {
     // Se inyecta explicitamente porque las NEXT_PUBLIC_* se inlinean en el
     // bundle del cliente durante el build, antes de que corra el codigo de
     // arriba en un proceso distinto.
+    //
+    // `||`, no `??`: una variable de entorno de CI sin configurar (ej. la
+    // variable de repo de GitHub Actions si no se creo) llega como STRING
+    // VACIO, no como undefined — con `??` el fallback nunca se activaba y el
+    // build salia con GAME_SERVER_HTTP="", que en un fetch se resuelve como
+    // ruta relativa al propio origen (el sitio se llamaba a si mismo).
     NEXT_PUBLIC_GAME_SERVER_HTTP:
-      process.env.NEXT_PUBLIC_GAME_SERVER_HTTP ?? "http://localhost:2567",
+      process.env.NEXT_PUBLIC_GAME_SERVER_HTTP || "http://localhost:2567",
   },
 };
 
