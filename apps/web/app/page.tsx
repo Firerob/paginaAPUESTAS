@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -18,9 +18,16 @@ import {
   type MinesSize,
 } from "@ah/shared";
 import { AuthInterceptModal } from "../components/AuthInterceptModal";
+import { AuthModal, type AuthSession, type AuthTab } from "../components/AuthModal";
 import { CajeroModal, type WalletSnapshot } from "../components/CajeroModal";
 import { MatchHistoryModal } from "../components/MatchHistoryModal";
 import { TopBar } from "../components/TopBar";
+import {
+  clearAllSessions,
+  readActiveSession,
+  saveDevSession,
+  saveRealSession,
+} from "../lib/authStorage";
 import { LiveTicker } from "../components/LiveTicker";
 import { StatsWidget, type ActivityStats } from "../components/StatsWidget";
 import { GameCard } from "../components/GameCard";
@@ -103,7 +110,10 @@ export default function Lobby() {
   const [chatOpen, setChatOpen] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const loginSectionRef = useRef<HTMLDivElement>(null);
+  // Modal de cuenta REAL (login/registro con contraseña) — separado del
+  // intercept de arriba, que solo avisa que hace falta sesion.
+  const [realAuthOpen, setRealAuthOpen] = useState(false);
+  const [realAuthTab, setRealAuthTab] = useState<AuthTab>("login");
 
   // Arranca en `true` tanto en el servidor como en el primer render del
   // cliente (sessionStorage no existe en el servidor) para que hidraten
@@ -125,10 +135,10 @@ export default function Lobby() {
   }, []);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("ah:token");
-    if (stored) {
-      setToken(stored);
-      setName(sessionStorage.getItem("ah:name") ?? "");
+    const session = readActiveSession();
+    if (session) {
+      setToken(session.token);
+      setName(session.name);
     }
   }, []);
 
@@ -194,8 +204,7 @@ export default function Lobby() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "login fallido");
 
-      sessionStorage.setItem("ah:token", data.token);
-      sessionStorage.setItem("ah:name", data.displayName);
+      saveDevSession({ token: data.token, name: data.displayName });
       setToken(data.token);
       setName(data.displayName);
     } catch (e) {
@@ -206,17 +215,23 @@ export default function Lobby() {
   };
 
   const logout = (): void => {
-    sessionStorage.clear();
+    clearAllSessions();
     setToken(null);
     setBalance(null);
   };
 
-  // Ir al login real: cierra el modal de intercepcion (si estaba abierto) y
-  // lleva al invitado hasta la tarjeta de "usuarios de prueba", el unico
-  // mecanismo de autenticacion que existe de verdad en este demo.
-  const goToLogin = useCallback(() => {
+  // Cuenta real: AuthModal ya trae el token cuando llama aca, solo hace
+  // falta persistirlo y actualizar el mismo estado que ya usa dev-login.
+  const onAuthenticated = useCallback((session: AuthSession) => {
+    saveRealSession(session);
+    setToken(session.token);
+    setName(session.name);
+  }, []);
+
+  const openRealAuth = useCallback((mode: AuthTab) => {
     setAuthModalOpen(false);
-    loginSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setRealAuthTab(mode);
+    setRealAuthOpen(true);
   }, []);
 
   // Modo invitado: puede elegir juego y apuesta libremente, pero "Buscar
@@ -282,7 +297,7 @@ export default function Lobby() {
             }}
             onOpenHistory={() => setHistoryOpen(true)}
             onLogout={logout}
-            onRequestAuth={goToLogin}
+            onRequestAuth={openRealAuth}
           />
           <LiveTicker apiBase={GAME_SERVER_HTTP} />
         </div>
@@ -391,7 +406,7 @@ export default function Lobby() {
         </p>
 
         {!token && (
-          <div className="card" ref={loginSectionRef}>
+          <div className="card">
             <h2>Entrar · usuarios de prueba</h2>
 
             <label className="terms-check">
@@ -443,8 +458,16 @@ export default function Lobby() {
       <AuthInterceptModal
         open={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        onCreateAccount={goToLogin}
-        onLogin={goToLogin}
+        onCreateAccount={() => openRealAuth("register")}
+        onLogin={() => openRealAuth("login")}
+      />
+
+      <AuthModal
+        open={realAuthOpen}
+        onClose={() => setRealAuthOpen(false)}
+        initialTab={realAuthTab}
+        apiBase={GAME_SERVER_HTTP}
+        onAuthenticated={onAuthenticated}
       />
 
       {token && (

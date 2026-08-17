@@ -11,7 +11,7 @@ interface TopBarProps {
   onOpenCajero: () => void;
   onOpenHistory: () => void;
   onLogout: () => void;
-  onRequestAuth: () => void;
+  onRequestAuth: (mode: "login" | "register") => void;
 }
 
 /** Topbar fija con glassmorphism: logo, saldo y menu de cuenta. */
@@ -105,10 +105,10 @@ export function TopBar({
         </div>
       ) : (
         <div className="topbar-right">
-          <button className="btn btn-ghost topbar-auth-btn" onClick={onRequestAuth}>
+          <button className="btn btn-ghost topbar-auth-btn" onClick={() => onRequestAuth("login")}>
             Iniciar sesión
           </button>
-          <button className="btn btn-gold topbar-auth-btn" onClick={onRequestAuth}>
+          <button className="btn btn-gold topbar-auth-btn" onClick={() => onRequestAuth("register")}>
             Registrarse
           </button>
         </div>

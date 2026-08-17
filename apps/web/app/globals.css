@@ -1419,6 +1419,75 @@ body::before {
   color: var(--text);
 }
 
+/* Formulario de login/registro real (AuthModal). */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-password-wrap {
+  position: relative;
+}
+
+.auth-password-wrap .cajero-destination-input {
+  padding-right: 2.6rem;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.auth-password-toggle:hover {
+  color: var(--text);
+}
+
+/* Alerta destacada: correo duplicado al registrarse. */
+.auth-duplicate-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(255, 93, 115, 0.45);
+  border-radius: 12px;
+  background: rgba(255, 93, 115, 0.1);
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+.auth-duplicate-banner span {
+  flex: 1;
+}
+
+.auth-duplicate-banner-btn {
+  flex-shrink: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgba(255, 93, 115, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 93, 115, 0.15);
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-duplicate-banner-btn:hover {
+  background: rgba(255, 93, 115, 0.25);
+}
+
 .cajero-head {
   display: flex;
   align-items: center;

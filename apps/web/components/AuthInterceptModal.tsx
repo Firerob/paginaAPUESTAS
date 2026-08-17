@@ -12,10 +12,9 @@ interface AuthInterceptModalProps {
 /**
  * Intercepta "¡Buscar rival ahora!" cuando no hay sesión: el invitado puede
  * explorar juegos y apuestas libremente, pero para entrar de verdad a la
- * cola necesita autenticarse. "Crear cuenta" e "Iniciar sesión" llevan los
- * dos al mismo lugar (la tarjeta de "usuarios de prueba" — el único login
- * real que existe en este demo), pero se muestran separados porque así es
- * como el usuario lee la decisión, no como funciona el backend.
+ * cola necesita autenticarse. "Crear cuenta" abre `AuthModal` en la pestaña
+ * de registro, "Iniciar sesión" en la de login — page.tsx es quien decide
+ * eso, este componente solo expone las dos intenciones por separado.
  */
 export function AuthInterceptModal({ open, onClose, onCreateAccount, onLogin }: AuthInterceptModalProps) {
   if (!open) return null;

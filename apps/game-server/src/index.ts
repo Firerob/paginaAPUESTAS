@@ -44,6 +44,11 @@ async function main(): Promise<void> {
   };
 
   const app = express();
+  // Render (y la mayoria de PaaS) ponen el servicio detras de un proxy: sin
+  // esto, `req.ip` siempre devuelve la IP interna del proxy, no la del
+  // cliente real — y el limitador de intentos de /api/auth/login|register
+  // terminaria agrupando a todo el mundo bajo la misma IP.
+  app.set("trust proxy", 1);
   app.use(cors(corsOptions));
   // La libreria `cors` ya responde el preflight solo con el middleware de
   // arriba; esto es un manejador explicito de refuerzo para *cualquier*

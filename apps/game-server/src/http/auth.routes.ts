@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { issueToken } from "../auth/jwt";
+import { AuthServiceError, loginUser, registerUser } from "../services/auth.service";
 import { ensureDevUser } from "../services/wallet.service";
 
 const DEV_USERS: Record<string, { id: string; name: string; email: string }> = {
@@ -42,4 +43,93 @@ authRoutes.post("/api/auth/dev-login", async (req: Request, res: Response) => {
 
   const token = issueToken(user.id, user.name);
   res.json({ token, userId: user.id, displayName: user.name });
+});
+
+// ---------------------------------------------------------------------------
+// Cuentas reales: registro e inicio de sesion con contrasena
+// ---------------------------------------------------------------------------
+
+/**
+ * Cubeta de intentos por clave (IP + identificador). No es una defensa
+ * elaborada, solo frena fuerza bruta basica contra login/registro — mismo
+ * espiritu que `consumeBudget` en AirHockeyRoom y `consumeAction` en
+ * BlackjackRoom, adaptado a HTTP (sin socket que mantenga estado por si).
+ */
+const MAX_ATTEMPTS = 8;
+const WINDOW_MS = 5 * 60_000;
+const attempts = new Map<string, { count: number; windowStart: number }>();
+
+function checkRateLimit(key: string): boolean {
+  const now = Date.now();
+  const entry = attempts.get(key);
+  if (!entry || now - entry.windowStart > WINDOW_MS) {
+    attempts.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+  if (entry.count >= MAX_ATTEMPTS) return false;
+  entry.count++;
+  return true;
+}
+
+authRoutes.post("/api/auth/register", async (req: Request, res: Response) => {
+  const body = req.body as { username?: unknown; email?: unknown; password?: unknown };
+  const username = typeof body.username === "string" ? body.username : "";
+  const email = typeof body.email === "string" ? body.email : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!checkRateLimit(`register:${req.ip}`)) {
+    res.status(429).json({ error: "Demasiados intentos. Espera unos minutos." });
+    return;
+  }
+
+  try {
+    const user = await registerUser({ username, email, password });
+    const token = issueToken(user.userId, user.displayName);
+    res.status(201).json({ token, userId: user.userId, displayName: user.displayName });
+  } catch (error) {
+    if (error instanceof AuthServiceError) {
+      if (error.code === "email_taken") {
+        res.status(409).json({ error: "Este correo ya está registrado. Por favor, inicia sesión." });
+        return;
+      }
+      if (error.code === "username_taken") {
+        res.status(409).json({ error: "El nombre de usuario ya está en uso." });
+        return;
+      }
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error("[auth] fallo el registro", error);
+    res.status(500).json({ error: "No se pudo completar el registro." });
+  }
+});
+
+authRoutes.post("/api/auth/login", async (req: Request, res: Response) => {
+  const body = req.body as { identifier?: unknown; password?: unknown };
+  const identifier = typeof body.identifier === "string" ? body.identifier : "";
+  const password = typeof body.password === "string" ? body.password : "";
+
+  if (!checkRateLimit(`login:${req.ip}:${identifier.toLowerCase()}`)) {
+    res.status(429).json({ error: "Demasiados intentos. Espera unos minutos." });
+    return;
+  }
+
+  try {
+    const user = await loginUser({ identifier, password });
+    const token = issueToken(user.userId, user.displayName);
+    res.json({ token, userId: user.userId, displayName: user.displayName });
+  } catch (error) {
+    if (error instanceof AuthServiceError) {
+      if (error.code === "account_disabled") {
+        res.status(403).json({ error: "Tu cuenta no puede iniciar sesión en este momento." });
+        return;
+      }
+      // invalid_credentials (y cualquier otro caso de validacion): mismo
+      // mensaje generico siempre, a proposito (ver auth.service.ts).
+      res.status(401).json({ error: "Credenciales inválidas." });
+      return;
+    }
+    console.error("[auth] fallo el login", error);
+    res.status(500).json({ error: "No se pudo iniciar sesión." });
+  }
 });
